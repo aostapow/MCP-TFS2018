@@ -1,0 +1,21 @@
+{
+  "mcpServers": {
+    "tfs2018": {
+      "command": "node",
+      "args": [
+        "C:\\ruta\\a\\mcp-tfs2018\\dist\\index.js"
+      ],
+      "env": {
+        "TFS_BASE_URL": "http://tu-servidor-tfs:8080/tfs",
+        "TFS_COLLECTION": "DefaultCollection",
+        "TFS_PROJECT": "MiProyecto",
+        "TFS_API_VERSION": "4.1",
+        "TFS_AUTH_TYPE": "pat",
+        "TFS_PAT": "tu-personal-access-token",
+        "TFS_TLS_REJECT_UNAUTHORIZED": "false",
+        "LOG_LEVEL": "info",
+        "LOG_FORMAT": "pretty"
+      }
+    }
+  }
+}
