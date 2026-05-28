@@ -42,7 +42,7 @@ mcp-tfs2018/
 
    Completa al menos:
    - `TFS_BASE_URL` — ej. `http://tfs2018:8080/tfs`
-   - `TFS_COLLECTION` — ej. `Accusys`
+   - `TFS_COLLECTION` — ej. `Default`
    - `TFS_PROJECT` — proyecto por defecto
    - `TFS_AUTH_TYPE` — `pat` recomendado
    - `TFS_PAT` — generalo en TFS desde la web
