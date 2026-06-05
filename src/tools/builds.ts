@@ -19,11 +19,15 @@ const log = createChildLogger('tool:builds');
 
 // ─── Input schemas ────────────────────────────────────────────────────────────
 
+const ProjectOverride = z.object({
+  projectIdOrName: z.string().optional().describe('Project ID or name. Defaults to configured project.'),
+});
+
 const ListBuildDefinitionsSchema = z.object({
   name: z.string().optional().describe('Filter definitions by name (supports wildcards with *)'),
   type: z.enum(['build', 'xaml', 'all']).optional().default('build').describe('Definition type'),
   top: z.number().int().positive().max(200).optional().default(50).describe('Maximum results'),
-});
+}).merge(ProjectOverride);
 
 const GetBuildDefinitionSchema = z.object({
   definitionId: z.number().int().positive().describe('Build definition ID'),
@@ -33,7 +37,7 @@ const GetBuildDefinitionSchema = z.object({
     .positive()
     .optional()
     .describe('Specific revision to retrieve (latest if omitted)'),
-});
+}).merge(ProjectOverride);
 
 const ListBuildsSchema = z.object({
   definitionIds: z
@@ -53,11 +57,11 @@ const ListBuildsSchema = z.object({
   requestedFor: z.string().optional().describe('Filter by the user who requested the build'),
   minFinishTime: z.string().optional().describe('ISO 8601 date — only return builds finished after this time'),
   maxFinishTime: z.string().optional().describe('ISO 8601 date — only return builds finished before this time'),
-});
+}).merge(ProjectOverride);
 
 const GetBuildSchema = z.object({
   buildId: z.number().int().positive().describe('Build ID'),
-});
+}).merge(ProjectOverride);
 
 const QueueBuildSchema = z.object({
   definitionId: z.number().int().positive().describe('Build definition ID to queue'),
@@ -75,7 +79,7 @@ const QueueBuildSchema = z.object({
     .optional()
     .default('normal')
     .describe('Queue priority'),
-});
+}).merge(ProjectOverride);
 
 const GetBuildLogsSchema = z.object({
   buildId: z.number().int().positive().describe('Build ID'),
@@ -87,36 +91,36 @@ const GetBuildLogsSchema = z.object({
     .describe('Specific log entry ID. If omitted, lists available logs.'),
   startLine: z.number().int().nonnegative().optional().describe('First line to retrieve (0-based)'),
   endLine: z.number().int().positive().optional().describe('Last line to retrieve'),
-});
+}).merge(ProjectOverride);
 
 const CancelBuildSchema = z.object({
   buildId: z.number().int().positive().describe('Build ID to cancel'),
-});
+}).merge(ProjectOverride);
 
 const GetBuildArtifactsSchema = z.object({
   buildId: z.number().int().positive().describe('Build ID'),
-});
+}).merge(ProjectOverride);
 
 const GetBuildTimelineSchema = z.object({
   buildId: z.number().int().positive().describe('Build ID'),
-});
+}).merge(ProjectOverride);
 
 const GetBuildWorkItemsSchema = z.object({
   buildId: z.number().int().positive().describe('Build ID'),
   top: z.number().int().positive().max(100).optional().default(20)
     .describe('Maximum work items to return'),
-});
+}).merge(ProjectOverride);
 
 const ListBuildQueuesSchema = z.object({
   name: z.string().optional().describe('Filter queues by name'),
-});
+}).merge(ProjectOverride);
 
 // ─── Tool implementations ─────────────────────────────────────────────────────
 
 async function listBuildDefinitions(
   args: z.infer<typeof ListBuildDefinitionsSchema>,
 ): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('build/definitions', '');
 
   const params: Record<string, unknown> = { $top: args.top };
@@ -130,7 +134,7 @@ async function listBuildDefinitions(
 async function getBuildDefinition(
   args: z.infer<typeof GetBuildDefinitionSchema>,
 ): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('build/definitions', String(args.definitionId));
 
   const params: Record<string, unknown> = {};
@@ -141,7 +145,7 @@ async function getBuildDefinition(
 }
 
 async function listBuilds(args: z.infer<typeof ListBuildsSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('build/builds', '');
 
   const params: Record<string, unknown> = { $top: args.top };
@@ -158,14 +162,14 @@ async function listBuilds(args: z.infer<typeof ListBuildsSchema>): Promise<strin
 }
 
 async function getBuild(args: z.infer<typeof GetBuildSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('build/builds', String(args.buildId));
   const build = await client.get<Build>(url);
   return JSON.stringify(build, null, 2);
 }
 
 async function queueBuild(args: z.infer<typeof QueueBuildSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('build/builds', '');
 
   const body: BuildQueueRequest = {
@@ -184,7 +188,7 @@ async function queueBuild(args: z.infer<typeof QueueBuildSchema>): Promise<strin
 }
 
 async function getBuildLogs(args: z.infer<typeof GetBuildLogsSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
 
   if (args.logId !== undefined) {
     // TFS returns plain text for log content — must request responseType: 'text'
@@ -204,7 +208,7 @@ async function getBuildLogs(args: z.infer<typeof GetBuildLogsSchema>): Promise<s
 }
 
 async function cancelBuild(args: z.infer<typeof CancelBuildSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('build/builds', String(args.buildId));
 
   // TFS 2018 supports cancelling a build via JSON Patch — requires application/json-patch+json
@@ -221,21 +225,21 @@ async function cancelBuild(args: z.infer<typeof CancelBuildSchema>): Promise<str
 }
 
 async function getBuildArtifacts(args: z.infer<typeof GetBuildArtifactsSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('build/builds', args.buildId + '/artifacts');
   const result = await client.get<TfsListResponse<BuildArtifact>>(url);
   return JSON.stringify(result, null, 2);
 }
 
 async function getBuildTimeline(args: z.infer<typeof GetBuildTimelineSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('build/builds', args.buildId + '/timeline');
   const result = await client.get<BuildTimeline>(url);
   return JSON.stringify(result, null, 2);
 }
 
 async function getBuildWorkItems(args: z.infer<typeof GetBuildWorkItemsSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('build/builds', args.buildId + '/workitems');
   const result = await client.get<TfsListResponse<{ id: number; url: string }>>(url, {
     $top: args.top,
@@ -244,7 +248,7 @@ async function getBuildWorkItems(args: z.infer<typeof GetBuildWorkItemsSchema>):
 }
 
 async function listBuildQueues(args: z.infer<typeof ListBuildQueuesSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('distributedtask/queues', '');
   const params: Record<string, unknown> = {};
   params['api-version'] = '4.1-preview';
