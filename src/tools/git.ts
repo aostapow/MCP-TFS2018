@@ -16,18 +16,22 @@ const log = createChildLogger('tool:git');
 
 // ─── Input schemas ────────────────────────────────────────────────────────────
 
+const ProjectOverride = z.object({
+  projectIdOrName: z.string().optional().describe('Project ID or name. Defaults to configured project.'),
+});
+
 const ListGitReposSchema = z.object({
   includeHidden: z.boolean().optional().default(false)
     .describe('Include hidden repositories'),
   includeAllUrls: z.boolean().optional().default(false)
     .describe('Include all clone URLs (SSH, HTTPS, etc.)'),
-});
+}).merge(ProjectOverride);
 
 const ListGitBranchesSchema = z.object({
   repositoryId: z.string().min(1).describe('Repository name or GUID'),
   filter: z.string().optional().describe('Filter branches by name prefix (e.g. "feature/")'),
   top: z.number().int().positive().max(200).optional().default(50).describe('Maximum branches'),
-});
+}).merge(ProjectOverride);
 
 const ListGitCommitsSchema = z.object({
   repositoryId: z.string().min(1).describe('Repository name or GUID'),
@@ -37,20 +41,20 @@ const ListGitCommitsSchema = z.object({
   toDate: z.string().optional().describe('ISO 8601 end date'),
   top: z.number().int().positive().max(100).optional().default(20).describe('Maximum commits'),
   skip: z.number().int().nonnegative().optional().default(0),
-});
+}).merge(ProjectOverride);
 
 const GetGitCommitSchema = z.object({
   repositoryId: z.string().min(1).describe('Repository name or GUID'),
   commitId: z.string().min(1).describe('Full or abbreviated commit SHA'),
   changeCount: z.number().int().nonnegative().optional().default(0)
     .describe('Number of file changes to include (0 = none)'),
-});
+}).merge(ProjectOverride);
 
 const GetGitFileContentSchema = z.object({
   repositoryId: z.string().min(1).describe('Repository name or GUID'),
   path: z.string().min(1).describe('File path within the repo (e.g. /src/Program.cs)'),
   branch: z.string().optional().describe('Branch name or commit SHA. Defaults to default branch.'),
-});
+}).merge(ProjectOverride);
 
 const ListGitItemsSchema = z.object({
   repositoryId: z.string().min(1).describe('Repository name or GUID'),
@@ -58,7 +62,7 @@ const ListGitItemsSchema = z.object({
   branch: z.string().optional().describe('Branch or commit SHA. Defaults to default branch.'),
   recursionLevel: z.enum(['none', 'oneLevel', 'full']).optional().default('oneLevel')
     .describe('Directory recursion depth'),
-});
+}).merge(ProjectOverride);
 
 const ListGitPullRequestsSchema = z.object({
   repositoryId: z.string().min(1).describe('Repository name or GUID'),
@@ -69,17 +73,17 @@ const ListGitPullRequestsSchema = z.object({
   targetBranch: z.string().optional()
     .describe('Filter by target branch (e.g. "refs/heads/main")'),
   top: z.number().int().positive().max(100).optional().default(20),
-});
+}).merge(ProjectOverride);
 
 const GetGitPullRequestSchema = z.object({
   repositoryId: z.string().min(1).describe('Repository name or GUID'),
   pullRequestId: z.number().int().positive().describe('Pull request ID'),
-});
+}).merge(ProjectOverride);
 
 // ─── Tool implementations ─────────────────────────────────────────────────────
 
 async function listGitRepos(args: z.infer<typeof ListGitReposSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('git/repositories', '');
   const params: Record<string, unknown> = {};
   if (args.includeHidden) params.includeHidden = true;
@@ -89,7 +93,7 @@ async function listGitRepos(args: z.infer<typeof ListGitReposSchema>): Promise<s
 }
 
 async function listGitBranches(args: z.infer<typeof ListGitBranchesSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('git/repositories', args.repositoryId + '/refs');
   const params: Record<string, unknown> = {
     filter: 'heads/' + (args.filter ?? ''),
@@ -100,7 +104,7 @@ async function listGitBranches(args: z.infer<typeof ListGitBranchesSchema>): Pro
 }
 
 async function listGitCommits(args: z.infer<typeof ListGitCommitsSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('git/repositories', args.repositoryId + '/commits');
   const params: Record<string, unknown> = { $top: args.top, $skip: args.skip };
   if (args.branch) params['searchCriteria.itemVersion.version'] = args.branch;
@@ -112,7 +116,7 @@ async function listGitCommits(args: z.infer<typeof ListGitCommitsSchema>): Promi
 }
 
 async function getGitCommit(args: z.infer<typeof GetGitCommitSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('git/repositories', args.repositoryId + '/commits/' + args.commitId);
   const params: Record<string, unknown> = {};
   if (args.changeCount > 0) params.changeCount = args.changeCount;
@@ -121,7 +125,7 @@ async function getGitCommit(args: z.infer<typeof GetGitCommitSchema>): Promise<s
 }
 
 async function getGitFileContent(args: z.infer<typeof GetGitFileContentSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('git/repositories', args.repositoryId + '/items');
   const params: Record<string, unknown> = {
     path: args.path,
@@ -137,7 +141,7 @@ async function getGitFileContent(args: z.infer<typeof GetGitFileContentSchema>):
 }
 
 async function listGitItems(args: z.infer<typeof ListGitItemsSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('git/repositories', args.repositoryId + '/items');
   const params: Record<string, unknown> = {
     scopePath: args.path,
@@ -153,7 +157,7 @@ async function listGitItems(args: z.infer<typeof ListGitItemsSchema>): Promise<s
 }
 
 async function listGitPullRequests(args: z.infer<typeof ListGitPullRequestsSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('git/repositories', args.repositoryId + '/pullrequests');
   const params: Record<string, unknown> = {
     'searchCriteria.status': args.status,
@@ -167,7 +171,7 @@ async function listGitPullRequests(args: z.infer<typeof ListGitPullRequestsSchem
 }
 
 async function getGitPullRequest(args: z.infer<typeof GetGitPullRequestSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl(
     'git/repositories',
     args.repositoryId + '/pullrequests/' + args.pullRequestId,
