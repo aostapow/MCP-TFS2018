@@ -9,7 +9,10 @@ import type { TfsListResponse } from '../types/tfs.js';
 const log = createChildLogger('tool:dashboards-packaging');
 const PREVIEW_API_VERSION = '4.1-preview';
 
-const TeamSchema = z.object({ team: z.string().optional() });
+const TeamSchema = z.object({
+  team: z.string().optional(),
+  projectIdOrName: z.string().optional().describe('Project ID or name. Defaults to configured project.'),
+});
 const DashboardIdSchema = TeamSchema.extend({ dashboardId: z.string().min(1) });
 const DashboardBodySchema = TeamSchema.extend({ body: z.record(z.unknown()) });
 const UpdateDashboardSchema = DashboardIdSchema.extend({
@@ -37,9 +40,9 @@ const UpdatePackageVersionSchema = PackageVersionSchema.extend({ body: z.record(
 const DeletePackageVersionSchema = PackageVersionSchema.extend({ confirmDelete: z.boolean().optional().default(false) });
 const UpdateFeedPermissionsSchema = FeedIdSchema.extend({ body: z.unknown(), confirmUpdate: z.boolean().optional().default(false) });
 
-function teamDashboardUrl(resource: string, team?: string): string {
+function teamDashboardUrl(resource: string, team?: string, project?: string): string {
   const cfg = getConfig();
-  const base = cfg.baseUrl.replace(/\/+$/, '') + '/' + cfg.collection + '/' + encodeURIComponent(cfg.project);
+  const base = cfg.baseUrl.replace(/\/+$/, '') + '/' + cfg.collection + '/' + encodeURIComponent(project ?? cfg.project);
   const teamSegment = team ? '/' + encodeURIComponent(team) : '';
   return base + teamSegment + '/_apis/dashboard/' + resource.replace(/^\/+/, '');
 }
@@ -50,19 +53,19 @@ function params(extra: Record<string, unknown> = {}): Record<string, unknown> {
 
 async function listDashboards(args: z.infer<typeof TeamSchema>): Promise<string> {
   const client = getTfsClient();
-  const result = await client.get<TfsListResponse<unknown>>(teamDashboardUrl('dashboards', args.team), params());
+  const result = await client.get<TfsListResponse<unknown>>(teamDashboardUrl('dashboards', args.team, args.projectIdOrName), params());
   return JSON.stringify(result, null, 2);
 }
 
 async function getDashboard(args: z.infer<typeof DashboardIdSchema>): Promise<string> {
   const client = getTfsClient();
-  const result = await client.get<unknown>(teamDashboardUrl('dashboards/' + args.dashboardId, args.team), params());
+  const result = await client.get<unknown>(teamDashboardUrl('dashboards/' + args.dashboardId, args.team, args.projectIdOrName), params());
   return JSON.stringify(result, null, 2);
 }
 
 async function createDashboard(args: z.infer<typeof DashboardBodySchema>): Promise<string> {
   const client = getTfsClient();
-  const result = await client.post<unknown>(teamDashboardUrl('dashboards', args.team), args.body, params());
+  const result = await client.post<unknown>(teamDashboardUrl('dashboards', args.team, args.projectIdOrName), args.body, params());
   log.info('Created dashboard');
   return JSON.stringify(result, null, 2);
 }
@@ -70,7 +73,7 @@ async function createDashboard(args: z.infer<typeof DashboardBodySchema>): Promi
 async function updateDashboard(args: z.infer<typeof UpdateDashboardSchema>): Promise<string> {
   if (!args.confirmUpdate) throw new Error('confirmUpdate=true is required to update a dashboard.');
   const client = getTfsClient();
-  const result = await client.patch<unknown>(teamDashboardUrl('dashboards/' + args.dashboardId, args.team), args.body, params());
+  const result = await client.patch<unknown>(teamDashboardUrl('dashboards/' + args.dashboardId, args.team, args.projectIdOrName), args.body, params());
   log.info('Updated dashboard ' + args.dashboardId);
   return JSON.stringify(result, null, 2);
 }
@@ -78,26 +81,26 @@ async function updateDashboard(args: z.infer<typeof UpdateDashboardSchema>): Pro
 async function deleteDashboard(args: z.infer<typeof DeleteDashboardSchema>): Promise<string> {
   if (!args.confirmDelete) throw new Error('confirmDelete=true is required to delete a dashboard.');
   const client = getTfsClient();
-  const result = await client.delete<unknown>(teamDashboardUrl('dashboards/' + args.dashboardId, args.team), params());
+  const result = await client.delete<unknown>(teamDashboardUrl('dashboards/' + args.dashboardId, args.team, args.projectIdOrName), params());
   log.info('Deleted dashboard ' + args.dashboardId);
   return JSON.stringify(result ?? { ok: true }, null, 2);
 }
 
 async function listWidgets(args: z.infer<typeof DashboardIdSchema>): Promise<string> {
   const client = getTfsClient();
-  const result = await client.get<TfsListResponse<unknown>>(teamDashboardUrl('dashboards/' + args.dashboardId + '/widgets', args.team), params());
+  const result = await client.get<TfsListResponse<unknown>>(teamDashboardUrl('dashboards/' + args.dashboardId + '/widgets', args.team, args.projectIdOrName), params());
   return JSON.stringify(result, null, 2);
 }
 
 async function getWidget(args: z.infer<typeof WidgetIdSchema>): Promise<string> {
   const client = getTfsClient();
-  const result = await client.get<unknown>(teamDashboardUrl('dashboards/' + args.dashboardId + '/widgets/' + args.widgetId, args.team), params());
+  const result = await client.get<unknown>(teamDashboardUrl('dashboards/' + args.dashboardId + '/widgets/' + args.widgetId, args.team, args.projectIdOrName), params());
   return JSON.stringify(result, null, 2);
 }
 
 async function addWidget(args: z.infer<typeof WidgetBodySchema>): Promise<string> {
   const client = getTfsClient();
-  const result = await client.post<unknown>(teamDashboardUrl('dashboards/' + args.dashboardId + '/widgets', args.team), args.body, params());
+  const result = await client.post<unknown>(teamDashboardUrl('dashboards/' + args.dashboardId + '/widgets', args.team, args.projectIdOrName), args.body, params());
   log.info('Added widget to dashboard ' + args.dashboardId);
   return JSON.stringify(result, null, 2);
 }
@@ -105,7 +108,7 @@ async function addWidget(args: z.infer<typeof WidgetBodySchema>): Promise<string
 async function updateWidget(args: z.infer<typeof UpdateWidgetSchema>): Promise<string> {
   if (!args.confirmUpdate) throw new Error('confirmUpdate=true is required to update a widget.');
   const client = getTfsClient();
-  const result = await client.patch<unknown>(teamDashboardUrl('dashboards/' + args.dashboardId + '/widgets/' + args.widgetId, args.team), args.body, params());
+  const result = await client.patch<unknown>(teamDashboardUrl('dashboards/' + args.dashboardId + '/widgets/' + args.widgetId, args.team, args.projectIdOrName), args.body, params());
   log.info('Updated widget ' + args.widgetId);
   return JSON.stringify(result, null, 2);
 }
@@ -113,7 +116,7 @@ async function updateWidget(args: z.infer<typeof UpdateWidgetSchema>): Promise<s
 async function deleteWidget(args: z.infer<typeof DeleteWidgetSchema>): Promise<string> {
   if (!args.confirmDelete) throw new Error('confirmDelete=true is required to delete a widget.');
   const client = getTfsClient();
-  const result = await client.delete<unknown>(teamDashboardUrl('dashboards/' + args.dashboardId + '/widgets/' + args.widgetId, args.team), params());
+  const result = await client.delete<unknown>(teamDashboardUrl('dashboards/' + args.dashboardId + '/widgets/' + args.widgetId, args.team, args.projectIdOrName), params());
   log.info('Deleted widget ' + args.widgetId);
   return JSON.stringify(result ?? { ok: true }, null, 2);
 }
