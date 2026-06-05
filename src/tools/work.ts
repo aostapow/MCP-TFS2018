@@ -11,6 +11,7 @@ const WORK_API_VERSION = '4.1-preview';
 
 const TeamSchema = z.object({
   team: z.string().optional().describe('Optional team name. Defaults to project-level work endpoint.'),
+  projectIdOrName: z.string().optional().describe('Project ID or name. Defaults to configured project.'),
 });
 
 const BoardSchema = TeamSchema.extend({
@@ -77,13 +78,13 @@ const UpdateDaysOffSchema = CapacitySchema.extend({
   confirmUpdate: z.boolean().optional().default(false).describe('Required to update team days off'),
 });
 
-function workUrl(resource: string, team?: string): string {
+function workUrl(resource: string, team?: string, project?: string): string {
   const cfg = getConfig();
   const cleanBase = cfg.baseUrl.replace(/\/+$/, '');
-  const project = encodeURIComponent(cfg.project);
+  const proj = encodeURIComponent(project ?? cfg.project);
   const teamSegment = team ? '/' + encodeURIComponent(team) : '';
   const cleanResource = resource.replace(/^\/+/, '');
-  return cleanBase + '/' + cfg.collection + '/' + project + teamSegment + '/_apis/work/' + cleanResource;
+  return cleanBase + '/' + cfg.collection + '/' + proj + teamSegment + '/_apis/work/' + cleanResource;
 }
 
 function workParams(extra: Record<string, unknown> = {}): Record<string, unknown> {
@@ -92,81 +93,81 @@ function workParams(extra: Record<string, unknown> = {}): Record<string, unknown
 
 async function listBoards(args: z.infer<typeof TeamSchema>): Promise<string> {
   const client = getTfsClient();
-  const result = await client.get<TfsListResponse<unknown>>(workUrl('boards', args.team), workParams());
+  const result = await client.get<TfsListResponse<unknown>>(workUrl('boards', args.team, args.projectIdOrName), workParams());
   return JSON.stringify(result, null, 2);
 }
 
 async function getBoard(args: z.infer<typeof BoardSchema>): Promise<string> {
   const client = getTfsClient();
-  const result = await client.get<unknown>(workUrl('boards/' + encodeURIComponent(args.board), args.team), workParams());
+  const result = await client.get<unknown>(workUrl('boards/' + encodeURIComponent(args.board), args.team, args.projectIdOrName), workParams());
   return JSON.stringify(result, null, 2);
 }
 
 async function getBoardColumns(args: z.infer<typeof BoardSchema>): Promise<string> {
   const client = getTfsClient();
-  const result = await client.get<unknown>(workUrl('boards/' + encodeURIComponent(args.board) + '/columns', args.team), workParams());
+  const result = await client.get<unknown>(workUrl('boards/' + encodeURIComponent(args.board) + '/columns', args.team, args.projectIdOrName), workParams());
   return JSON.stringify(result, null, 2);
 }
 
 async function updateBoardColumns(args: z.infer<typeof UpdateBoardPartSchema>): Promise<string> {
   if (!args.confirmUpdate) throw new Error('confirmUpdate=true is required to update board columns.');
   const client = getTfsClient();
-  const result = await client.put<unknown>(workUrl('boards/' + encodeURIComponent(args.board) + '/columns', args.team), args.body, workParams());
+  const result = await client.put<unknown>(workUrl('boards/' + encodeURIComponent(args.board) + '/columns', args.team, args.projectIdOrName), args.body, workParams());
   log.info('Updated columns for board ' + args.board);
   return JSON.stringify(result, null, 2);
 }
 
 async function getBoardRows(args: z.infer<typeof BoardSchema>): Promise<string> {
   const client = getTfsClient();
-  const result = await client.get<unknown>(workUrl('boards/' + encodeURIComponent(args.board) + '/rows', args.team), workParams());
+  const result = await client.get<unknown>(workUrl('boards/' + encodeURIComponent(args.board) + '/rows', args.team, args.projectIdOrName), workParams());
   return JSON.stringify(result, null, 2);
 }
 
 async function updateBoardRows(args: z.infer<typeof UpdateBoardPartSchema>): Promise<string> {
   if (!args.confirmUpdate) throw new Error('confirmUpdate=true is required to update board rows.');
   const client = getTfsClient();
-  const result = await client.put<unknown>(workUrl('boards/' + encodeURIComponent(args.board) + '/rows', args.team), args.body, workParams());
+  const result = await client.put<unknown>(workUrl('boards/' + encodeURIComponent(args.board) + '/rows', args.team, args.projectIdOrName), args.body, workParams());
   log.info('Updated rows for board ' + args.board);
   return JSON.stringify(result, null, 2);
 }
 
 async function getCardFields(args: z.infer<typeof BoardSchema>): Promise<string> {
   const client = getTfsClient();
-  const result = await client.get<unknown>(workUrl('boards/' + encodeURIComponent(args.board) + '/cardsettings', args.team), workParams());
+  const result = await client.get<unknown>(workUrl('boards/' + encodeURIComponent(args.board) + '/cardsettings', args.team, args.projectIdOrName), workParams());
   return JSON.stringify(result, null, 2);
 }
 
 async function updateCardFields(args: z.infer<typeof UpdateBoardPartSchema>): Promise<string> {
   if (!args.confirmUpdate) throw new Error('confirmUpdate=true is required to update board card fields.');
   const client = getTfsClient();
-  const result = await client.put<unknown>(workUrl('boards/' + encodeURIComponent(args.board) + '/cardsettings', args.team), args.body, workParams());
+  const result = await client.put<unknown>(workUrl('boards/' + encodeURIComponent(args.board) + '/cardsettings', args.team, args.projectIdOrName), args.body, workParams());
   log.info('Updated card fields/settings for board ' + args.board);
   return JSON.stringify(result, null, 2);
 }
 
 async function getCardRules(args: z.infer<typeof BoardSchema>): Promise<string> {
   const client = getTfsClient();
-  const result = await client.get<unknown>(workUrl('boards/' + encodeURIComponent(args.board) + '/cardrulesettings', args.team), workParams());
+  const result = await client.get<unknown>(workUrl('boards/' + encodeURIComponent(args.board) + '/cardrulesettings', args.team, args.projectIdOrName), workParams());
   return JSON.stringify(result, null, 2);
 }
 
 async function updateCardRules(args: z.infer<typeof UpdateBoardPartSchema>): Promise<string> {
   if (!args.confirmUpdate) throw new Error('confirmUpdate=true is required to update board card rules.');
   const client = getTfsClient();
-  const result = await client.put<unknown>(workUrl('boards/' + encodeURIComponent(args.board) + '/cardrulesettings', args.team), args.body, workParams());
+  const result = await client.put<unknown>(workUrl('boards/' + encodeURIComponent(args.board) + '/cardrulesettings', args.team, args.projectIdOrName), args.body, workParams());
   log.info('Updated card rules for board ' + args.board);
   return JSON.stringify(result, null, 2);
 }
 
 async function listBoardCharts(args: z.infer<typeof BoardSchema>): Promise<string> {
   const client = getTfsClient();
-  const result = await client.get<TfsListResponse<unknown>>(workUrl('boards/' + encodeURIComponent(args.board) + '/charts', args.team), workParams());
+  const result = await client.get<TfsListResponse<unknown>>(workUrl('boards/' + encodeURIComponent(args.board) + '/charts', args.team, args.projectIdOrName), workParams());
   return JSON.stringify(result, null, 2);
 }
 
 async function getBoardChart(args: z.infer<typeof ChartSchema>): Promise<string> {
   const client = getTfsClient();
-  const result = await client.get<unknown>(workUrl('boards/' + encodeURIComponent(args.board) + '/charts/' + encodeURIComponent(args.chart), args.team), workParams());
+  const result = await client.get<unknown>(workUrl('boards/' + encodeURIComponent(args.board) + '/charts/' + encodeURIComponent(args.chart), args.team, args.projectIdOrName), workParams());
   return JSON.stringify(result, null, 2);
 }
 
@@ -174,7 +175,7 @@ async function updateBoardChart(args: z.infer<typeof UpdateChartSchema>): Promis
   if (!args.confirmUpdate) throw new Error('confirmUpdate=true is required to update a board chart.');
   const client = getTfsClient();
   const result = await client.put<unknown>(
-    workUrl('boards/' + encodeURIComponent(args.board) + '/charts/' + encodeURIComponent(args.chart), args.team),
+    workUrl('boards/' + encodeURIComponent(args.board) + '/charts/' + encodeURIComponent(args.chart), args.team, args.projectIdOrName),
     args.body,
     workParams(),
   );
@@ -184,19 +185,19 @@ async function updateBoardChart(args: z.infer<typeof UpdateChartSchema>): Promis
 
 async function listBacklogs(args: z.infer<typeof TeamSchema>): Promise<string> {
   const client = getTfsClient();
-  const result = await client.get<TfsListResponse<unknown>>(workUrl('backlogs', args.team), workParams());
+  const result = await client.get<TfsListResponse<unknown>>(workUrl('backlogs', args.team, args.projectIdOrName), workParams());
   return JSON.stringify(result, null, 2);
 }
 
 async function getBacklog(args: z.infer<typeof BacklogSchema>): Promise<string> {
   const client = getTfsClient();
-  const result = await client.get<unknown>(workUrl('backlogs/' + encodeURIComponent(args.backlogId), args.team), workParams());
+  const result = await client.get<unknown>(workUrl('backlogs/' + encodeURIComponent(args.backlogId), args.team, args.projectIdOrName), workParams());
   return JSON.stringify(result, null, 2);
 }
 
 async function getBacklogWorkItems(args: z.infer<typeof BacklogSchema>): Promise<string> {
   const client = getTfsClient();
-  const result = await client.get<unknown>(workUrl('backlogs/' + encodeURIComponent(args.backlogId) + '/workItems', args.team), workParams());
+  const result = await client.get<unknown>(workUrl('backlogs/' + encodeURIComponent(args.backlogId) + '/workItems', args.team, args.projectIdOrName), workParams());
   return JSON.stringify(result, null, 2);
 }
 
@@ -208,28 +209,28 @@ async function getProcessConfiguration(): Promise<string> {
 
 async function getTeamSettings(args: z.infer<typeof TeamSchema>): Promise<string> {
   const client = getTfsClient();
-  const result = await client.get<unknown>(workUrl('teamsettings', args.team), workParams());
+  const result = await client.get<unknown>(workUrl('teamsettings', args.team, args.projectIdOrName), workParams());
   return JSON.stringify(result, null, 2);
 }
 
 async function updateTeamSettings(args: z.infer<typeof UpdateTeamSettingsSchema>): Promise<string> {
   if (!args.confirmUpdate) throw new Error('confirmUpdate=true is required to update team settings.');
   const client = getTfsClient();
-  const result = await client.patch<unknown>(workUrl('teamsettings', args.team), args.body, workParams());
+  const result = await client.patch<unknown>(workUrl('teamsettings', args.team, args.projectIdOrName), args.body, workParams());
   log.info('Updated team settings' + (args.team ? ' for ' + args.team : ''));
   return JSON.stringify(result, null, 2);
 }
 
 async function getTeamFieldValues(args: z.infer<typeof TeamSchema>): Promise<string> {
   const client = getTfsClient();
-  const result = await client.get<unknown>(workUrl('teamsettings/teamfieldvalues', args.team), workParams());
+  const result = await client.get<unknown>(workUrl('teamsettings/teamfieldvalues', args.team, args.projectIdOrName), workParams());
   return JSON.stringify(result, null, 2);
 }
 
 async function updateTeamFieldValues(args: z.infer<typeof UpdateTeamFieldValuesSchema>): Promise<string> {
   if (!args.confirmUpdate) throw new Error('confirmUpdate=true is required to update team field values.');
   const client = getTfsClient();
-  const result = await client.patch<unknown>(workUrl('teamsettings/teamfieldvalues', args.team), args.body, workParams());
+  const result = await client.patch<unknown>(workUrl('teamsettings/teamfieldvalues', args.team, args.projectIdOrName), args.body, workParams());
   log.info('Updated team field values' + (args.team ? ' for ' + args.team : ''));
   return JSON.stringify(result, null, 2);
 }
@@ -238,14 +239,14 @@ async function getTeamIterations(args: z.infer<typeof IterationsSchema>): Promis
   const client = getTfsClient();
   const params: Record<string, unknown> = {};
   if (args.timeframe) params.$timeframe = args.timeframe;
-  const result = await client.get<TfsListResponse<unknown>>(workUrl('teamsettings/iterations', args.team), workParams(params));
+  const result = await client.get<TfsListResponse<unknown>>(workUrl('teamsettings/iterations', args.team, args.projectIdOrName), workParams(params));
   return JSON.stringify(result, null, 2);
 }
 
 async function addTeamIteration(args: z.infer<typeof AddTeamIterationSchema>): Promise<string> {
   if (!args.confirmAdd) throw new Error('confirmAdd=true is required to add a team iteration.');
   const client = getTfsClient();
-  const result = await client.post<unknown>(workUrl('teamsettings/iterations/' + encodeURIComponent(args.iterationId), args.team), {}, workParams());
+  const result = await client.post<unknown>(workUrl('teamsettings/iterations/' + encodeURIComponent(args.iterationId), args.team, args.projectIdOrName), {}, workParams());
   log.info('Added team iteration ' + args.iterationId);
   return JSON.stringify(result, null, 2);
 }
@@ -253,21 +254,21 @@ async function addTeamIteration(args: z.infer<typeof AddTeamIterationSchema>): P
 async function removeTeamIteration(args: z.infer<typeof RemoveTeamIterationSchema>): Promise<string> {
   if (!args.confirmRemove) throw new Error('confirmRemove=true is required to remove a team iteration.');
   const client = getTfsClient();
-  const result = await client.delete<unknown>(workUrl('teamsettings/iterations/' + encodeURIComponent(args.iterationId), args.team), workParams());
+  const result = await client.delete<unknown>(workUrl('teamsettings/iterations/' + encodeURIComponent(args.iterationId), args.team, args.projectIdOrName), workParams());
   log.info('Removed team iteration ' + args.iterationId);
   return JSON.stringify(result ?? { ok: true }, null, 2);
 }
 
 async function getTeamCapacity(args: z.infer<typeof CapacitySchema>): Promise<string> {
   const client = getTfsClient();
-  const result = await client.get<TfsListResponse<unknown>>(workUrl('teamsettings/iterations/' + encodeURIComponent(args.iterationId) + '/capacities', args.team), workParams());
+  const result = await client.get<TfsListResponse<unknown>>(workUrl('teamsettings/iterations/' + encodeURIComponent(args.iterationId) + '/capacities', args.team, args.projectIdOrName), workParams());
   return JSON.stringify(result, null, 2);
 }
 
 async function getTeamMemberCapacity(args: z.infer<typeof MemberCapacitySchema>): Promise<string> {
   const client = getTfsClient();
   const result = await client.get<unknown>(
-    workUrl('teamsettings/iterations/' + encodeURIComponent(args.iterationId) + '/capacities/' + encodeURIComponent(args.teamMemberId), args.team),
+    workUrl('teamsettings/iterations/' + encodeURIComponent(args.iterationId) + '/capacities/' + encodeURIComponent(args.teamMemberId), args.team, args.projectIdOrName),
     workParams(),
   );
   return JSON.stringify(result, null, 2);
@@ -277,7 +278,7 @@ async function updateTeamMemberCapacity(args: z.infer<typeof UpdateMemberCapacit
   if (!args.confirmUpdate) throw new Error('confirmUpdate=true is required to update team member capacity.');
   const client = getTfsClient();
   const result = await client.patch<unknown>(
-    workUrl('teamsettings/iterations/' + encodeURIComponent(args.iterationId) + '/capacities/' + encodeURIComponent(args.teamMemberId), args.team),
+    workUrl('teamsettings/iterations/' + encodeURIComponent(args.iterationId) + '/capacities/' + encodeURIComponent(args.teamMemberId), args.team, args.projectIdOrName),
     args.body,
     workParams(),
   );
@@ -287,7 +288,7 @@ async function updateTeamMemberCapacity(args: z.infer<typeof UpdateMemberCapacit
 
 async function getTeamDaysOff(args: z.infer<typeof CapacitySchema>): Promise<string> {
   const client = getTfsClient();
-  const result = await client.get<unknown>(workUrl('teamsettings/iterations/' + encodeURIComponent(args.iterationId) + '/teamdaysoff', args.team), workParams());
+  const result = await client.get<unknown>(workUrl('teamsettings/iterations/' + encodeURIComponent(args.iterationId) + '/teamdaysoff', args.team, args.projectIdOrName), workParams());
   return JSON.stringify(result, null, 2);
 }
 
@@ -295,7 +296,7 @@ async function updateTeamDaysOff(args: z.infer<typeof UpdateDaysOffSchema>): Pro
   if (!args.confirmUpdate) throw new Error('confirmUpdate=true is required to update team days off.');
   const client = getTfsClient();
   const result = await client.patch<unknown>(
-    workUrl('teamsettings/iterations/' + encodeURIComponent(args.iterationId) + '/teamdaysoff', args.team),
+    workUrl('teamsettings/iterations/' + encodeURIComponent(args.iterationId) + '/teamdaysoff', args.team, args.projectIdOrName),
     args.body,
     workParams(),
   );
