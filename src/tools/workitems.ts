@@ -18,6 +18,10 @@ const log = createChildLogger('tool:workitems');
 
 // ─── Input schemas ────────────────────────────────────────────────────────────
 
+const ProjectOverride = z.object({
+  projectIdOrName: z.string().optional().describe('Project ID or name. Defaults to configured project.'),
+});
+
 const GetWorkItemSchema = z.object({
   id: z.number().int().positive().describe('Work item ID'),
   expand: z
@@ -42,7 +46,7 @@ const QueryWorkItemsSchema = z.object({
     .optional()
     .default(50)
     .describe('Maximum number of results to return'),
-});
+}).merge(ProjectOverride);
 
 const WorkItemFieldValueSchema = z.union([z.string(), z.number(), z.boolean(), z.null()]);
 
@@ -69,7 +73,7 @@ const CreateWorkItemSchema = z.object({
       'Additional work item fields by reference name. Example: {"Microsoft.VSTS.Common.Severity":"4","Accusys.Modulo":"CARTERA"}',
     ),
   parentId: z.number().int().positive().optional().describe('Parent work item ID'),
-});
+}).merge(ProjectOverride);
 
 const UpdateWorkItemSchema = z.object({
   id: z.number().int().positive().describe('Work item ID to update'),
@@ -141,11 +145,11 @@ const RemoveWorkItemLinkSchema = z.object({
 const ListWorkItemTypesSchema = z.object({
   includeFields: z.boolean().optional().default(false)
     .describe('Include field definitions for each type (slower)'),
-});
+}).merge(ProjectOverride);
 
 const GetWorkItemTypeSchema = z.object({
   typeName: z.string().min(1).describe('Work item type name, e.g. "Bug", "Task", "User Story"'),
-});
+}).merge(ProjectOverride);
 
 const ListWorkItemFieldsSchema = z.object({
   filter: z.string().optional().describe('Optional text filter on field name or reference name'),
@@ -155,12 +159,12 @@ const GetSavedQueriesSchema = z.object({
   folder: z.string().optional().describe('Folder path to list (e.g. "My Queries", "Shared Queries")'),
   depth: z.number().int().min(0).max(5).optional().default(2)
     .describe('How many levels of subfolders to expand'),
-});
+}).merge(ProjectOverride);
 
 const RunSavedQuerySchema = z.object({
   queryId: z.string().uuid().describe('Saved query ID (GUID). Use tfs_get_saved_queries to find IDs.'),
   top: z.number().int().positive().max(200).optional().default(50).describe('Maximum results'),
-});
+}).merge(ProjectOverride);
 
 // ─── Tool implementations ─────────────────────────────────────────────────────
 
@@ -201,7 +205,7 @@ async function getWorkItems(args: z.infer<typeof GetWorkItemsSchema>): Promise<s
 }
 
 async function queryWorkItems(args: z.infer<typeof QueryWorkItemsSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const wiqlUrl = client.projectApiUrl('wit/wiql', '');
 
   // 1. Run WIQL to get IDs
@@ -227,7 +231,7 @@ async function queryWorkItems(args: z.infer<typeof QueryWorkItemsSchema>): Promi
 }
 
 async function createWorkItem(args: z.infer<typeof CreateWorkItemSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const encodedType = encodeURIComponent(args.type);
   const url = client.projectApiUrl('wit/workitems', `$${encodedType}`);
 
@@ -394,7 +398,7 @@ async function removeWorkItemLink(args: z.infer<typeof RemoveWorkItemLinkSchema>
 }
 
 async function listWorkItemTypes(args: z.infer<typeof ListWorkItemTypesSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('wit/workitemtypes', '');
   const params: Record<string, unknown> = {};
   if (args.includeFields) params.$expand = 'fields';
@@ -403,7 +407,7 @@ async function listWorkItemTypes(args: z.infer<typeof ListWorkItemTypesSchema>):
 }
 
 async function getWorkItemType(args: z.infer<typeof GetWorkItemTypeSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('wit/workitemtypes', encodeURIComponent(args.typeName));
   const result = await client.get<WorkItemTypeDefinition>(url, { $expand: 'fields' });
   return JSON.stringify(result, null, 2);
@@ -424,7 +428,7 @@ async function listWorkItemFields(args: z.infer<typeof ListWorkItemFieldsSchema>
 }
 
 async function getSavedQueries(args: z.infer<typeof GetSavedQueriesSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const basePath = args.folder ? encodeURIComponent(args.folder) : '';
   const url = client.projectApiUrl('wit/queries', basePath);
   const result = await client.get<SavedQuery>(url, { $depth: args.depth, $expand: 'all' });
@@ -432,7 +436,7 @@ async function getSavedQueries(args: z.infer<typeof GetSavedQueriesSchema>): Pro
 }
 
 async function runSavedQuery(args: z.infer<typeof RunSavedQuerySchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const wiqlUrl = client.projectApiUrl('wit/wiql', args.queryId);
   const queryResult = await client.get<WorkItemQueryResult>(wiqlUrl, { $top: args.top });
 
