@@ -7,9 +7,13 @@ import type { Build, BuildDefinition, BuildQueue, TfsListResponse } from '../typ
 
 const log = createChildLogger('tool:builds-advanced');
 
+const ProjectOverride = z.object({
+  projectIdOrName: z.string().optional().describe('Project ID or name. Defaults to configured project.'),
+});
+
 const BuildIdSchema = z.object({
   buildId: z.number().int().positive().describe('Build ID'),
-});
+}).merge(ProjectOverride);
 
 const BuildTagSchema = BuildIdSchema.extend({
   tag: z.string().min(1).describe('Build tag'),
@@ -32,11 +36,11 @@ const DownloadBuildArtifactSchema = BuildIdSchema.extend({
 
 const BuildDefinitionIdSchema = z.object({
   definitionId: z.number().int().positive().describe('Build definition ID'),
-});
+}).merge(ProjectOverride);
 
 const WriteBuildDefinitionSchema = z.object({
   definition: z.record(z.unknown()).describe('Full build definition JSON body expected by TFS'),
-});
+}).merge(ProjectOverride);
 
 const UpdateBuildDefinitionSchema = BuildDefinitionIdSchema.extend({
   definition: z.record(z.unknown()).describe('Full build definition JSON body expected by TFS'),
@@ -85,11 +89,11 @@ const VariableGroupIdSchema = z.object({
 
 const ListVariableGroupsSchema = z.object({
   groupName: z.string().optional().describe('Optional variable group name filter'),
-});
+}).merge(ProjectOverride);
 
 const VariableGroupBodySchema = z.object({
   body: z.record(z.unknown()).describe('Variable group JSON body expected by TFS'),
-});
+}).merge(ProjectOverride);
 
 const UpdateVariableGroupSchema = VariableGroupIdSchema.extend({
   body: z.record(z.unknown()).describe('Variable group JSON body expected by TFS'),
@@ -100,21 +104,21 @@ const DeleteVariableGroupSchema = VariableGroupIdSchema.extend({
 });
 
 async function getBuildChanges(args: z.infer<typeof BuildIdSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('build/builds', args.buildId + '/changes');
   const result = await client.get<TfsListResponse<unknown>>(url);
   return JSON.stringify(result, null, 2);
 }
 
 async function getBuildTags(args: z.infer<typeof BuildIdSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('build/builds', args.buildId + '/tags');
   const result = await client.get<TfsListResponse<string>>(url);
   return JSON.stringify(result, null, 2);
 }
 
 async function addBuildTag(args: z.infer<typeof BuildTagSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('build/builds', args.buildId + '/tags/' + encodeURIComponent(args.tag));
   const result = await client.put<unknown>(url, {});
   log.info('Added tag ' + args.tag + ' to build #' + args.buildId);
@@ -123,7 +127,7 @@ async function addBuildTag(args: z.infer<typeof BuildTagSchema>): Promise<string
 
 async function deleteBuildTag(args: z.infer<typeof DeleteBuildTagSchema>): Promise<string> {
   if (!args.confirmDelete) throw new Error('confirmDelete=true is required to remove a build tag.');
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('build/builds', args.buildId + '/tags/' + encodeURIComponent(args.tag));
   const result = await client.delete<unknown>(url);
   log.info('Removed tag ' + args.tag + ' from build #' + args.buildId);
@@ -132,13 +136,13 @@ async function deleteBuildTag(args: z.infer<typeof DeleteBuildTagSchema>): Promi
 
 async function listAllBuildTags(): Promise<string> {
   const client = getTfsClient();
-  const url = client.projectApiUrl('build/tags', '');
+  const url = client.projectApiUrl('build/tags', ''); // project-level, uses default
   const result = await client.get<TfsListResponse<string>>(url);
   return JSON.stringify(result, null, 2);
 }
 
 async function getBuildLogText(args: z.infer<typeof GetBuildLogTextSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('build/builds', args.buildId + '/logs/' + args.logId);
   const params: Record<string, unknown> = { $format: 'text' };
   if (args.startLine !== undefined) params.startLine = args.startLine;
@@ -148,7 +152,7 @@ async function getBuildLogText(args: z.infer<typeof GetBuildLogTextSchema>): Pro
 }
 
 async function downloadBuildArtifact(args: z.infer<typeof DownloadBuildArtifactSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('build/builds', args.buildId + '/artifacts');
   const bytes = await client.getRaw(url, { artifactName: args.artifactName, $format: 'zip' });
   return JSON.stringify({
@@ -160,14 +164,14 @@ async function downloadBuildArtifact(args: z.infer<typeof DownloadBuildArtifactS
 }
 
 async function getBuildDefinitionRevisions(args: z.infer<typeof BuildDefinitionIdSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('build/definitions', args.definitionId + '/revisions');
   const result = await client.get<TfsListResponse<unknown>>(url);
   return JSON.stringify(result, null, 2);
 }
 
 async function createBuildDefinition(args: z.infer<typeof WriteBuildDefinitionSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('build/definitions', '');
   const result = await client.post<BuildDefinition>(url, args.definition);
   log.info('Created build definition');
@@ -175,7 +179,7 @@ async function createBuildDefinition(args: z.infer<typeof WriteBuildDefinitionSc
 }
 
 async function updateBuildDefinition(args: z.infer<typeof UpdateBuildDefinitionSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('build/definitions', String(args.definitionId));
   const result = await client.put<BuildDefinition>(url, args.definition);
   log.info('Updated build definition #' + args.definitionId);
@@ -184,7 +188,7 @@ async function updateBuildDefinition(args: z.infer<typeof UpdateBuildDefinitionS
 
 async function deleteBuildDefinition(args: z.infer<typeof DeleteBuildDefinitionSchema>): Promise<string> {
   if (!args.confirmDelete) throw new Error('confirmDelete=true is required to delete a build definition.');
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('build/definitions', String(args.definitionId));
   const result = await client.delete<unknown>(url);
   log.info('Deleted build definition #' + args.definitionId);
@@ -258,7 +262,7 @@ async function listTaskDefinitions(args: z.infer<typeof ListTaskDefinitionsSchem
 }
 
 async function listVariableGroups(args: z.infer<typeof ListVariableGroupsSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('distributedtask/variablegroups', '');
   const params: Record<string, unknown> = { 'api-version': '4.1-preview' };
   if (args.groupName) params.groupName = args.groupName;
@@ -267,14 +271,14 @@ async function listVariableGroups(args: z.infer<typeof ListVariableGroupsSchema>
 }
 
 async function getVariableGroup(args: z.infer<typeof VariableGroupIdSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('distributedtask/variablegroups', String(args.groupId));
   const result = await client.get<unknown>(url, { 'api-version': '4.1-preview' });
   return JSON.stringify(result, null, 2);
 }
 
 async function createVariableGroup(args: z.infer<typeof VariableGroupBodySchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('distributedtask/variablegroups', '');
   const result = await client.post<unknown>(url, args.body, { 'api-version': '4.1-preview' });
   log.info('Created variable group');
@@ -282,7 +286,7 @@ async function createVariableGroup(args: z.infer<typeof VariableGroupBodySchema>
 }
 
 async function updateVariableGroup(args: z.infer<typeof UpdateVariableGroupSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('distributedtask/variablegroups', String(args.groupId));
   const result = await client.put<unknown>(url, args.body, { 'api-version': '4.1-preview' });
   log.info('Updated variable group #' + args.groupId);
@@ -291,7 +295,7 @@ async function updateVariableGroup(args: z.infer<typeof UpdateVariableGroupSchem
 
 async function deleteVariableGroup(args: z.infer<typeof DeleteVariableGroupSchema>): Promise<string> {
   if (!args.confirmDelete) throw new Error('confirmDelete=true is required to delete a variable group.');
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('distributedtask/variablegroups', String(args.groupId));
   const result = await client.delete<unknown>(url, { 'api-version': '4.1-preview' });
   log.info('Deleted variable group #' + args.groupId);
