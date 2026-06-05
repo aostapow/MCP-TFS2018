@@ -23,6 +23,10 @@ const log = createChildLogger('tool:testcases');
 
 // ─── Input schemas ────────────────────────────────────────────────────────────
 
+const ProjectOverride = z.object({
+  projectIdOrName: z.string().optional().describe('Project ID or name. Defaults to configured project.'),
+});
+
 const ListTestPlansSchema = z.object({
   includePlanDetails: z
     .boolean()
@@ -34,7 +38,7 @@ const ListTestPlansSchema = z.object({
     .optional()
     .default(false)
     .describe('Only return active test plans'),
-});
+}).merge(ProjectOverride);
 
 const CreateTestPlanSchema = z.object({
   name: z.string().min(1).describe('Name for the new test plan'),
@@ -43,7 +47,7 @@ const CreateTestPlanSchema = z.object({
   description: z.string().optional().describe('Optional plan description'),
   startDate: z.string().optional().describe('Optional ISO 8601 start date'),
   endDate: z.string().optional().describe('Optional ISO 8601 end date'),
-});
+}).merge(ProjectOverride);
 
 const UpdateTestPlanSchema = z.object({
   planId: z.number().int().positive().describe('Test plan ID to update'),
@@ -54,17 +58,17 @@ const UpdateTestPlanSchema = z.object({
   startDate: z.string().optional().describe('New ISO 8601 start date'),
   endDate: z.string().optional().describe('New ISO 8601 end date'),
   state: z.string().optional().describe('New plan state, if supported by the server process template'),
-});
+}).merge(ProjectOverride);
 
 const GetTestPlanSchema = z.object({
   planId: z.number().int().positive().describe('Test plan ID'),
-});
+}).merge(ProjectOverride);
 
 const CreateTestSuiteSchema = z.object({
   planId: z.number().int().positive().describe('Test plan ID'),
   parentSuiteId: z.number().int().positive().describe('Parent suite ID, usually the rootSuite.id from the plan'),
   name: z.string().min(1).describe('Name for the new static test suite'),
-});
+}).merge(ProjectOverride);
 
 const ListTestSuitesSchema = z.object({
   planId: z.number().int().positive().describe('Test plan ID'),
@@ -73,7 +77,7 @@ const ListTestSuitesSchema = z.object({
     .optional()
     .default(false)
     .describe('Expand children and additional properties'),
-});
+}).merge(ProjectOverride);
 
 const CreateTestCaseSchema = z.object({
   title: z.string().min(1).describe('Title of the test case work item'),
@@ -84,7 +88,7 @@ const CreateTestCaseSchema = z.object({
   priority: z.number().int().min(1).max(4).optional().describe('Priority 1-4'),
   fields: z.record(z.union([z.string(), z.number(), z.boolean(), z.null()])).optional()
     .describe('Additional work item fields by reference name'),
-});
+}).merge(ProjectOverride);
 
 const ListTestCasesSchema = z.object({
   planId: z.number().int().positive().describe('Test plan ID'),
@@ -98,13 +102,13 @@ const ListTestCasesSchema = z.object({
     .default(100)
     .describe('Maximum test cases to return'),
   skip: z.number().int().nonnegative().optional().default(0).describe('Number to skip (paging)'),
-});
+}).merge(ProjectOverride);
 
 const AddTestCaseToSuiteSchema = z.object({
   planId: z.number().int().positive().describe('Test plan ID'),
   suiteId: z.number().int().positive().describe('Test suite ID'),
   testCaseId: z.number().int().positive().describe('Existing Test Case work item ID to add'),
-});
+}).merge(ProjectOverride);
 
 const RemoveTestCaseFromSuiteSchema = z.object({
   planId: z.number().int().positive().describe('Test plan ID'),
@@ -112,7 +116,7 @@ const RemoveTestCaseFromSuiteSchema = z.object({
   testCaseId: z.number().int().positive().describe('Test Case work item ID to remove from the suite'),
   confirmRemove: z.boolean().optional().default(false)
     .describe('Required to remove the test case from the suite. The work item itself is not deleted.'),
-});
+}).merge(ProjectOverride);
 
 const GetTestPointsSchema = z.object({
   planId: z.number().int().positive().describe('Test plan ID'),
@@ -122,13 +126,13 @@ const GetTestPointsSchema = z.object({
     .enum(['Passed', 'Failed', 'Inconclusive', 'Blocked', 'NotExecuted', 'None'])
     .optional()
     .describe('Filter by last test outcome'),
-});
+}).merge(ProjectOverride);
 
 const GetTestPointSchema = z.object({
   planId: z.number().int().positive().describe('Test plan ID'),
   suiteId: z.number().int().positive().describe('Test suite ID'),
   pointId: z.number().int().positive().describe('Test point ID'),
-});
+}).merge(ProjectOverride);
 
 const ListTestRunsSchema = z.object({
   top: z
@@ -145,7 +149,7 @@ const ListTestRunsSchema = z.object({
     .default(false)
     .describe('Include additional run details'),
   planId: z.number().int().positive().optional().describe('Filter by test plan ID'),
-});
+}).merge(ProjectOverride);
 
 const GetTestRunResultsSchema = z.object({
   runId: z.number().int().positive().describe('Test run ID'),
@@ -161,7 +165,7 @@ const GetTestRunResultsSchema = z.object({
     .enum(['Passed', 'Failed', 'Inconclusive', 'Aborted', 'Blocked', 'NotExecuted', 'None'])
     .optional()
     .describe('Filter by outcome'),
-});
+}).merge(ProjectOverride);
 
 const CreateTestRunSchema = z.object({
   name: z.string().min(1).describe('Name for the test run'),
@@ -172,7 +176,7 @@ const CreateTestRunSchema = z.object({
     .describe('Array of test point IDs to include in this run'),
   comment: z.string().optional().describe('Optional comment for the test run'),
   automated: z.boolean().optional().default(false).describe('Mark as an automated test run'),
-});
+}).merge(ProjectOverride);
 
 const UpdateTestRunSchema = z.object({
   runId: z.number().int().positive().describe('Test run ID to update'),
@@ -180,7 +184,7 @@ const UpdateTestRunSchema = z.object({
     .describe('New state for the test run'),
   comment: z.string().optional().describe('Comment to add to the run'),
   errorMessage: z.string().optional().describe('Error message if the run failed'),
-});
+}).merge(ProjectOverride);
 
 const UpdateTestResultsSchema = z.object({
   runId: z.number().int().positive().describe('Test run ID containing the results'),
@@ -193,15 +197,15 @@ const UpdateTestResultsSchema = z.object({
     comment: z.string().optional().describe('Comment on this result'),
     durationInMs: z.number().nonnegative().optional().describe('Duration of the test in milliseconds'),
   })).min(1).describe('Array of test results to update'),
-});
+}).merge(ProjectOverride);
 
 const GetTestConfigurationsSchema = z.object({
   top: z.number().int().positive().max(100).optional().default(20).describe('Maximum configurations to return'),
-});
+}).merge(ProjectOverride);
 
 const GetTestRunStatisticsSchema = z.object({
   runId: z.number().int().positive().describe('Test run ID'),
-});
+}).merge(ProjectOverride);
 
 // ─── Tool implementations ─────────────────────────────────────────────────────
 
@@ -210,7 +214,7 @@ function compactBody<T extends Record<string, unknown>>(body: T): Partial<T> {
 }
 
 async function listTestPlans(args: z.infer<typeof ListTestPlansSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.testApiUrl('plans');
 
   const params: Record<string, unknown> = {};
@@ -222,7 +226,7 @@ async function listTestPlans(args: z.infer<typeof ListTestPlansSchema>): Promise
 }
 
 async function createTestPlan(args: z.infer<typeof CreateTestPlanSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.testApiUrl('plans');
   const plan = await client.post<TestPlan>(url, compactBody({
     name: args.name,
@@ -237,7 +241,7 @@ async function createTestPlan(args: z.infer<typeof CreateTestPlanSchema>): Promi
 }
 
 async function updateTestPlan(args: z.infer<typeof UpdateTestPlanSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.testApiUrl('plans/' + args.planId);
   const plan = await client.patch<TestPlan>(url, compactBody({
     name: args.name,
@@ -253,14 +257,14 @@ async function updateTestPlan(args: z.infer<typeof UpdateTestPlanSchema>): Promi
 }
 
 async function getTestPlan(args: z.infer<typeof GetTestPlanSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.testApiUrl(`plans/${args.planId}`);
   const plan = await client.get<TestPlan>(url);
   return JSON.stringify(plan, null, 2);
 }
 
 async function createTestSuite(args: z.infer<typeof CreateTestSuiteSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.testApiUrl(`plans/${args.planId}/suites/${args.parentSuiteId}`);
   const result = await client.post<TestSuite | TfsListResponse<TestSuite>>(url, {
     suiteType: 'StaticTestSuite',
@@ -277,7 +281,7 @@ async function createTestSuite(args: z.infer<typeof CreateTestSuiteSchema>): Pro
 }
 
 async function listTestSuites(args: z.infer<typeof ListTestSuitesSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.testApiUrl(`plans/${args.planId}/suites`);
   const params: Record<string, unknown> = {};
   if (args.expand) params.$expand = true;
@@ -287,7 +291,7 @@ async function listTestSuites(args: z.infer<typeof ListTestSuitesSchema>): Promi
 }
 
 async function createTestCase(args: z.infer<typeof CreateTestCaseSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const encodedType = encodeURIComponent('Test Case');
   const url = client.projectApiUrl('wit/workitems', '$' + encodedType);
   const patches: WorkItemPatch[] = [
@@ -318,7 +322,7 @@ async function createTestCase(args: z.infer<typeof CreateTestCaseSchema>): Promi
 }
 
 async function listTestCases(args: z.infer<typeof ListTestCasesSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.testApiUrl(`plans/${args.planId}/suites/${args.suiteId}/testcases`);
 
   const result = await client.get<TfsListResponse<TestCase>>(url, {
@@ -329,7 +333,7 @@ async function listTestCases(args: z.infer<typeof ListTestCasesSchema>): Promise
 }
 
 async function addTestCaseToSuite(args: z.infer<typeof AddTestCaseToSuiteSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.testApiUrl(`plans/${args.planId}/suites/${args.suiteId}/testcases/${args.testCaseId}`);
   const result = await client.post<TfsListResponse<TestCase>>(url, {});
   log.info('Added test case #' + args.testCaseId + ' to suite #' + args.suiteId);
@@ -340,7 +344,7 @@ async function removeTestCaseFromSuite(args: z.infer<typeof RemoveTestCaseFromSu
   if (!args.confirmRemove) {
     throw new Error('confirmRemove=true is required to remove a test case from a suite.');
   }
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.testApiUrl(`plans/${args.planId}/suites/${args.suiteId}/testcases/${args.testCaseId}`);
   const result = await client.delete(url);
   log.info('Removed test case #' + args.testCaseId + ' from suite #' + args.suiteId);
@@ -348,7 +352,7 @@ async function removeTestCaseFromSuite(args: z.infer<typeof RemoveTestCaseFromSu
 }
 
 async function getTestPoints(args: z.infer<typeof GetTestPointsSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.testApiUrl(`plans/${args.planId}/suites/${args.suiteId}/points`);
 
   const params: Record<string, unknown> = {};
@@ -360,14 +364,14 @@ async function getTestPoints(args: z.infer<typeof GetTestPointsSchema>): Promise
 }
 
 async function getTestPoint(args: z.infer<typeof GetTestPointSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.testApiUrl(`plans/${args.planId}/suites/${args.suiteId}/points/${args.pointId}`);
   const result = await client.get<TestPoint>(url);
   return JSON.stringify(result, null, 2);
 }
 
 async function listTestRuns(args: z.infer<typeof ListTestRunsSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.testApiUrl('runs');
 
   const params: Record<string, unknown> = { $top: args.top };
@@ -379,7 +383,7 @@ async function listTestRuns(args: z.infer<typeof ListTestRunsSchema>): Promise<s
 }
 
 async function getTestRunResults(args: z.infer<typeof GetTestRunResultsSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.testApiUrl(`runs/${args.runId}/results`);
 
   const params: Record<string, unknown> = { $top: args.top };
@@ -390,7 +394,7 @@ async function getTestRunResults(args: z.infer<typeof GetTestRunResultsSchema>):
 }
 
 async function createTestRun(args: z.infer<typeof CreateTestRunSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.testApiUrl('runs');
 
   const body = {
@@ -407,7 +411,7 @@ async function createTestRun(args: z.infer<typeof CreateTestRunSchema>): Promise
 }
 
 async function updateTestRun(args: z.infer<typeof UpdateTestRunSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.testApiUrl('runs/' + args.runId);
   const body: TestRunUpdateRequest = {};
   if (args.state) body.state = args.state;
@@ -422,7 +426,7 @@ async function updateTestRun(args: z.infer<typeof UpdateTestRunSchema>): Promise
 }
 
 async function updateTestResults(args: z.infer<typeof UpdateTestResultsSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.testApiUrl('runs/' + args.runId + '/results');
   const items: TestResultUpdateItem[] = args.results.map((r) => ({
     id: r.id,
@@ -439,7 +443,7 @@ async function updateTestResults(args: z.infer<typeof UpdateTestResultsSchema>):
 }
 
 async function getTestConfigurations(args: z.infer<typeof GetTestConfigurationsSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.testApiUrl('configurations');
   const result = await client.get<TfsListResponse<TestConfiguration>>(url, {
     $top: args.top,
@@ -449,7 +453,7 @@ async function getTestConfigurations(args: z.infer<typeof GetTestConfigurationsS
 }
 
 async function getTestRunStatistics(args: z.infer<typeof GetTestRunStatisticsSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.testApiUrl('runs/' + args.runId + '/statistics');
   const result = await client.get<TestRunStatistics>(url);
   return JSON.stringify(result, null, 2);
