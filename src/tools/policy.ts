@@ -8,22 +8,26 @@ import type { TfsListResponse } from '../types/tfs.js';
 const log = createChildLogger('tool:policy');
 const POLICY_API_VERSION = '4.1-preview';
 
+const ProjectOverride = z.object({
+  projectIdOrName: z.string().optional().describe('Project ID or name. Defaults to configured project.'),
+});
+
 const PolicyTypeIdSchema = z.object({
   typeId: z.string().min(1).describe('Policy type GUID'),
-});
+}).merge(ProjectOverride);
 
 const ListPolicyConfigurationsSchema = z.object({
   scope: z.string().optional().describe('Optional scope filter if supported by TFS'),
   policyType: z.string().optional().describe('Optional policy type GUID filter'),
-});
+}).merge(ProjectOverride);
 
 const PolicyConfigurationIdSchema = z.object({
   configurationId: z.number().int().positive().describe('Policy configuration ID'),
-});
+}).merge(ProjectOverride);
 
 const PolicyConfigurationBodySchema = z.object({
   body: z.record(z.unknown()).describe('Policy configuration JSON body expected by TFS'),
-});
+}).merge(ProjectOverride);
 
 const UpdatePolicyConfigurationSchema = PolicyConfigurationIdSchema.extend({
   body: z.record(z.unknown()).describe('Policy configuration JSON body expected by TFS'),
@@ -36,7 +40,7 @@ const DeletePolicyConfigurationSchema = PolicyConfigurationIdSchema.extend({
 
 const EvaluatePolicySchema = z.object({
   body: z.record(z.unknown()).describe('Policy evaluation request body expected by TFS'),
-});
+}).merge(ProjectOverride);
 
 function policyParams(extra: Record<string, unknown> = {}): Record<string, unknown> {
   return { ...extra, 'api-version': POLICY_API_VERSION };
@@ -49,13 +53,13 @@ async function listPolicyTypes(): Promise<string> {
 }
 
 async function getPolicyType(args: z.infer<typeof PolicyTypeIdSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const result = await client.get<unknown>(client.projectApiUrl('policy/types', encodeURIComponent(args.typeId)), policyParams());
   return JSON.stringify(result, null, 2);
 }
 
 async function listPolicyConfigurations(args: z.infer<typeof ListPolicyConfigurationsSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const params: Record<string, unknown> = {};
   if (args.scope) params.scope = args.scope;
   if (args.policyType) params.policyType = args.policyType;
@@ -64,13 +68,13 @@ async function listPolicyConfigurations(args: z.infer<typeof ListPolicyConfigura
 }
 
 async function getPolicyConfiguration(args: z.infer<typeof PolicyConfigurationIdSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const result = await client.get<unknown>(client.projectApiUrl('policy/configurations', String(args.configurationId)), policyParams());
   return JSON.stringify(result, null, 2);
 }
 
 async function createPolicyConfiguration(args: z.infer<typeof PolicyConfigurationBodySchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const result = await client.post<unknown>(client.projectApiUrl('policy/configurations', ''), args.body, policyParams());
   log.info('Created policy configuration');
   return JSON.stringify(result, null, 2);
@@ -78,7 +82,7 @@ async function createPolicyConfiguration(args: z.infer<typeof PolicyConfiguratio
 
 async function updatePolicyConfiguration(args: z.infer<typeof UpdatePolicyConfigurationSchema>): Promise<string> {
   if (!args.confirmUpdate) throw new Error('confirmUpdate=true is required to update policy configuration.');
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const result = await client.put<unknown>(
     client.projectApiUrl('policy/configurations', String(args.configurationId)),
     args.body,
@@ -90,14 +94,14 @@ async function updatePolicyConfiguration(args: z.infer<typeof UpdatePolicyConfig
 
 async function deletePolicyConfiguration(args: z.infer<typeof DeletePolicyConfigurationSchema>): Promise<string> {
   if (!args.confirmDelete) throw new Error('confirmDelete=true is required to delete policy configuration.');
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const result = await client.delete<unknown>(client.projectApiUrl('policy/configurations', String(args.configurationId)), policyParams());
   log.info('Deleted policy configuration #' + args.configurationId);
   return JSON.stringify(result ?? { ok: true }, null, 2);
 }
 
 async function evaluatePolicy(args: z.infer<typeof EvaluatePolicySchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const result = await client.post<unknown>(client.projectApiUrl('policy/evaluations', ''), args.body, policyParams());
   return JSON.stringify(result, null, 2);
 }
