@@ -196,6 +196,11 @@ export class TfsClient {
   get projectName(): string {
     return this.config.project;
   }
+
+  forProject(override?: string): TfsClient {
+    if (!override || override === this.config.project) return this;
+    return new TfsClient({ ...this.config, project: override });
+  }
 }
 
 let _client: TfsClient | null = null;
