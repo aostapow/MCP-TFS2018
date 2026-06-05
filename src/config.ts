@@ -117,4 +117,8 @@ export function projectUrl(config: TfsConfig): string {
   return collectionUrl(config) + '/' + encodeURIComponent(config.project);
 }
 
+export function resolveProject(override?: string): string {
+  return override ?? getConfig().project;
+}
+
 export type { TfsConfig };
