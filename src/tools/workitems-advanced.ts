@@ -7,6 +7,10 @@ import type { TfsListResponse, WorkItem, WorkItemPatch } from '../types/tfs.js';
 
 const log = createChildLogger('tool:workitems-advanced');
 
+const ProjectOverride = z.object({
+  projectIdOrName: z.string().optional().describe('Project ID or name. Defaults to configured project.'),
+});
+
 const GetWorkItemUpdatesSchema = z.object({
   id: z.number().int().positive().describe('Work item ID'),
   top: z.number().int().positive().max(200).optional().default(50),
@@ -34,7 +38,7 @@ const DeleteWorkItemSchema = z.object({
 
 const DeletedWorkItemSchema = z.object({
   id: z.number().int().positive().describe('Deleted work item ID'),
-});
+}).merge(ProjectOverride);
 
 const RestoreWorkItemSchema = DeletedWorkItemSchema.extend({
   confirmRestore: z.boolean().optional().default(false).describe('Required to restore a deleted work item'),
@@ -72,11 +76,11 @@ const RemoveAttachmentFromWorkItemSchema = z.object({
 
 const GetCategorySchema = z.object({
   categoryName: z.string().min(1).describe('Category reference/name, e.g. Microsoft.BugCategory'),
-});
+}).merge(ProjectOverride);
 
 const TagNameSchema = z.object({
   tagName: z.string().min(1).describe('Tag name'),
-});
+}).merge(ProjectOverride);
 
 const DeleteTagSchema = TagNameSchema.extend({
   confirmDelete: z.boolean().optional().default(false).describe('Required to delete a tag'),
@@ -87,25 +91,25 @@ const SavedQueryBodySchema = z.object({
   name: z.string().min(1).describe('Query or folder name'),
   wiql: z.string().optional().describe('WIQL text. Omit when creating a folder.'),
   isFolder: z.boolean().optional().default(false).describe('Create/update a query folder instead of a WIQL query'),
-});
+}).merge(ProjectOverride);
 
 const UpdateSavedQuerySchema = z.object({
   queryIdOrPath: z.string().min(1).describe('Query GUID or path below wit/queries'),
   name: z.string().optional(),
   wiql: z.string().optional(),
   isFolder: z.boolean().optional(),
-});
+}).merge(ProjectOverride);
 
 const DeleteSavedQuerySchema = z.object({
   queryIdOrPath: z.string().min(1).describe('Query GUID or path below wit/queries'),
   confirmDelete: z.boolean().optional().default(false).describe('Required to delete a saved query/folder'),
-});
+}).merge(ProjectOverride);
 
 const ClassificationNodePathSchema = z.object({
   structureGroup: z.enum(['areas', 'iterations']).describe('Classification tree'),
   path: z.string().optional().describe('Optional node path below areas/iterations'),
   depth: z.number().int().min(0).max(20).optional().default(2),
-});
+}).merge(ProjectOverride);
 
 const CreateClassificationNodeSchema = z.object({
   structureGroup: z.enum(['areas', 'iterations']),
@@ -113,7 +117,7 @@ const CreateClassificationNodeSchema = z.object({
   name: z.string().min(1),
   startDate: z.string().optional().describe('Iteration start date ISO string'),
   finishDate: z.string().optional().describe('Iteration finish date ISO string'),
-});
+}).merge(ProjectOverride);
 
 const UpdateClassificationNodeSchema = z.object({
   structureGroup: z.enum(['areas', 'iterations']),
@@ -121,7 +125,7 @@ const UpdateClassificationNodeSchema = z.object({
   name: z.string().optional(),
   startDate: z.string().optional(),
   finishDate: z.string().optional(),
-});
+}).merge(ProjectOverride);
 
 const DeleteClassificationNodeSchema = z.object({
   structureGroup: z.enum(['areas', 'iterations']),
@@ -129,7 +133,7 @@ const DeleteClassificationNodeSchema = z.object({
   reclassifyId: z.number().int().positive().optional()
     .describe('Optional target classification node ID for existing work items'),
   confirmDelete: z.boolean().optional().default(false).describe('Required to delete a classification node'),
-});
+}).merge(ProjectOverride);
 
 function encodePath(value: string): string {
   return value.split('/').filter(Boolean).map(encodeURIComponent).join('/');
@@ -188,13 +192,13 @@ async function deleteWorkItem(args: z.infer<typeof DeleteWorkItemSchema>): Promi
 
 async function listDeletedWorkItems(): Promise<string> {
   const client = getTfsClient();
-  const url = client.projectApiUrl('wit/recyclebin', '');
+  const url = client.projectApiUrl('wit/recyclebin', ''); // uses default project
   const result = await client.get<TfsListResponse<unknown>>(url);
   return JSON.stringify(result, null, 2);
 }
 
 async function getDeletedWorkItem(args: z.infer<typeof DeletedWorkItemSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('wit/recyclebin', String(args.id));
   const result = await client.get<unknown>(url);
   return JSON.stringify(result, null, 2);
@@ -202,7 +206,7 @@ async function getDeletedWorkItem(args: z.infer<typeof DeletedWorkItemSchema>): 
 
 async function restoreWorkItem(args: z.infer<typeof RestoreWorkItemSchema>): Promise<string> {
   if (!args.confirmRestore) throw new Error('confirmRestore=true is required to restore a work item.');
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('wit/recyclebin', String(args.id));
   const result = await client.patch<unknown>(url, { isDeleted: false });
   log.info('Restored work item #' + args.id + ' from recycle bin');
@@ -211,7 +215,7 @@ async function restoreWorkItem(args: z.infer<typeof RestoreWorkItemSchema>): Pro
 
 async function destroyDeletedWorkItem(args: z.infer<typeof DestroyDeletedWorkItemSchema>): Promise<string> {
   if (!args.confirmDestroy) throw new Error('confirmDestroy=true is required to permanently delete a work item.');
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('wit/recyclebin', String(args.id));
   const result = await client.delete<unknown>(url);
   log.info('Permanently deleted recycled work item #' + args.id);
@@ -284,13 +288,13 @@ async function listRelationTypes(): Promise<string> {
 
 async function listCategories(): Promise<string> {
   const client = getTfsClient();
-  const url = client.projectApiUrl('wit/workitemtypecategories', '');
+  const url = client.projectApiUrl('wit/workitemtypecategories', ''); // uses default project
   const result = await client.get<TfsListResponse<unknown>>(url);
   return JSON.stringify(result, null, 2);
 }
 
 async function getCategory(args: z.infer<typeof GetCategorySchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('wit/workitemtypecategories', encodeURIComponent(args.categoryName));
   const result = await client.get<unknown>(url);
   return JSON.stringify(result, null, 2);
@@ -298,20 +302,20 @@ async function getCategory(args: z.infer<typeof GetCategorySchema>): Promise<str
 
 async function listTags(): Promise<string> {
   const client = getTfsClient();
-  const url = client.projectApiUrl('wit/tags', '');
+  const url = client.projectApiUrl('wit/tags', ''); // uses default project
   const result = await client.get<TfsListResponse<unknown>>(url);
   return JSON.stringify(result, null, 2);
 }
 
 async function getTag(args: z.infer<typeof TagNameSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('wit/tags', encodeURIComponent(args.tagName));
   const result = await client.get<unknown>(url);
   return JSON.stringify(result, null, 2);
 }
 
 async function createTag(args: z.infer<typeof TagNameSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('wit/tags', encodeURIComponent(args.tagName));
   const result = await client.put<unknown>(url, {});
   log.info('Created work item tag ' + args.tagName);
@@ -320,7 +324,7 @@ async function createTag(args: z.infer<typeof TagNameSchema>): Promise<string> {
 
 async function deleteTag(args: z.infer<typeof DeleteTagSchema>): Promise<string> {
   if (!args.confirmDelete) throw new Error('confirmDelete=true is required to delete a tag.');
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('wit/tags', encodeURIComponent(args.tagName));
   const result = await client.delete<unknown>(url);
   log.info('Deleted work item tag ' + args.tagName);
@@ -328,7 +332,7 @@ async function deleteTag(args: z.infer<typeof DeleteTagSchema>): Promise<string>
 }
 
 async function createSavedQuery(args: z.infer<typeof SavedQueryBodySchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('wit/queries', savedQueryResource(args.path));
   const body = args.isFolder
     ? { name: args.name, isFolder: true }
@@ -340,7 +344,7 @@ async function createSavedQuery(args: z.infer<typeof SavedQueryBodySchema>): Pro
 }
 
 async function updateSavedQuery(args: z.infer<typeof UpdateSavedQuerySchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('wit/queries', savedQueryResource(args.queryIdOrPath));
   const body: Record<string, unknown> = {};
   if (args.name !== undefined) body.name = args.name;
@@ -354,7 +358,7 @@ async function updateSavedQuery(args: z.infer<typeof UpdateSavedQuerySchema>): P
 
 async function deleteSavedQuery(args: z.infer<typeof DeleteSavedQuerySchema>): Promise<string> {
   if (!args.confirmDelete) throw new Error('confirmDelete=true is required to delete a saved query.');
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('wit/queries', savedQueryResource(args.queryIdOrPath));
   const result = await client.delete<unknown>(url);
   log.info('Deleted saved query ' + args.queryIdOrPath);
@@ -362,14 +366,14 @@ async function deleteSavedQuery(args: z.infer<typeof DeleteSavedQuerySchema>): P
 }
 
 async function getClassificationNode(args: z.infer<typeof ClassificationNodePathSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('wit/classificationnodes', classificationResource(args.structureGroup, args.path));
   const result = await client.get<unknown>(url, { '$depth': args.depth });
   return JSON.stringify(result, null, 2);
 }
 
 async function createClassificationNode(args: z.infer<typeof CreateClassificationNodeSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('wit/classificationnodes', classificationResource(args.structureGroup, args.parentPath));
   const body: Record<string, unknown> = { name: args.name };
   if (args.startDate || args.finishDate) {
@@ -384,7 +388,7 @@ async function createClassificationNode(args: z.infer<typeof CreateClassificatio
 }
 
 async function updateClassificationNode(args: z.infer<typeof UpdateClassificationNodeSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('wit/classificationnodes', classificationResource(args.structureGroup, args.path));
   const body: Record<string, unknown> = {};
   if (args.name !== undefined) body.name = args.name;
@@ -402,7 +406,7 @@ async function updateClassificationNode(args: z.infer<typeof UpdateClassificatio
 
 async function deleteClassificationNode(args: z.infer<typeof DeleteClassificationNodeSchema>): Promise<string> {
   if (!args.confirmDelete) throw new Error('confirmDelete=true is required to delete a classification node.');
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('wit/classificationnodes', classificationResource(args.structureGroup, args.path));
   const params = args.reclassifyId ? { reclassifyId: args.reclassifyId } : undefined;
   const result = await client.delete<unknown>(url, params);
