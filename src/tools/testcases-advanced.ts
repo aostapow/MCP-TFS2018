@@ -14,6 +14,10 @@ import type {
 
 const log = createChildLogger('tool:testcases-advanced');
 
+const ProjectOverride = z.object({
+  projectIdOrName: z.string().optional().describe('Project ID or name. Defaults to configured project.'),
+});
+
 const TestOutcomeSchema = z.enum([
   'Passed',
   'Failed',
@@ -29,7 +33,7 @@ const GetTestSuiteSchema = z.object({
   planId: z.number().int().positive().describe('Test plan ID'),
   suiteId: z.number().int().positive().describe('Test suite ID'),
   includeChildSuites: z.boolean().optional().default(false).describe('Include child suite details'),
-});
+}).merge(ProjectOverride);
 
 const UpdateTestSuiteSchema = z.object({
   planId: z.number().int().positive().describe('Test plan ID'),
@@ -39,26 +43,26 @@ const UpdateTestSuiteSchema = z.object({
     .describe('Default configuration IDs for the suite'),
   inheritDefaultConfigurations: z.boolean().optional()
     .describe('Whether to inherit default configurations from the parent suite'),
-});
+}).merge(ProjectOverride);
 
 const DeleteTestSuiteSchema = z.object({
   planId: z.number().int().positive().describe('Test plan ID'),
   suiteId: z.number().int().positive().describe('Test suite ID'),
   confirmDelete: z.boolean().optional().default(false).describe('Required to delete a test suite'),
-});
+}).merge(ProjectOverride);
 
 const CreateRequirementSuiteSchema = z.object({
   planId: z.number().int().positive().describe('Test plan ID'),
   parentSuiteId: z.number().int().positive().describe('Parent suite ID'),
   requirementId: z.number().int().positive().describe('Requirement/User Story work item ID'),
-});
+}).merge(ProjectOverride);
 
 const CreateQuerySuiteSchema = z.object({
   planId: z.number().int().positive().describe('Test plan ID'),
   parentSuiteId: z.number().int().positive().describe('Parent suite ID'),
   name: z.string().min(1).describe('Name for the query-based suite'),
   queryString: z.string().min(1).describe('WIQL query string for the suite'),
-});
+}).merge(ProjectOverride);
 
 const UpdateTestPointSchema = z.object({
   planId: z.number().int().positive().describe('Test plan ID'),
@@ -67,28 +71,28 @@ const UpdateTestPointSchema = z.object({
   outcome: TestOutcomeSchema.optional().describe('Last outcome to set on the point'),
   resetToActive: z.boolean().optional().default(false).describe('Reset point outcome to active/not executed'),
   tester: z.string().optional().describe('Tester identity display name/email/descriptor if supported by TFS'),
-});
+}).merge(ProjectOverride);
 
 const GetTestRunSchema = z.object({
   runId: z.number().int().positive().describe('Test run ID'),
   includeDetails: z.boolean().optional().default(true).describe('Include detailed run information'),
-});
+}).merge(ProjectOverride);
 
 const DeleteTestRunSchema = z.object({
   runId: z.number().int().positive().describe('Test run ID'),
   confirmDelete: z.boolean().optional().default(false).describe('Required to delete a test run'),
-});
+}).merge(ProjectOverride);
 
 const GetTestResultSchema = z.object({
   runId: z.number().int().positive().describe('Test run ID'),
   resultId: z.number().int().positive().describe('Test result ID'),
   detailsToInclude: z.string().optional().describe('Optional detailsToInclude value supported by the TFS API'),
-});
+}).merge(ProjectOverride);
 
 const GetTestResultHistorySchema = z.object({
   runId: z.number().int().positive().describe('Test run ID'),
   resultId: z.number().int().positive().describe('Test result ID'),
-});
+}).merge(ProjectOverride);
 
 const TestAttachmentBodySchema = z.object({
   fileName: z.string().min(1).describe('Attachment file name'),
@@ -100,27 +104,27 @@ const TestAttachmentBodySchema = z.object({
 
 const TestRunAttachmentSchema = TestAttachmentBodySchema.extend({
   runId: z.number().int().positive().describe('Test run ID'),
-});
+}).merge(ProjectOverride);
 
 const TestResultAttachmentSchema = TestAttachmentBodySchema.extend({
   runId: z.number().int().positive().describe('Test run ID'),
   resultId: z.number().int().positive().describe('Test result ID'),
-});
+}).merge(ProjectOverride);
 
 const ListTestRunAttachmentsSchema = z.object({
   runId: z.number().int().positive().describe('Test run ID'),
-});
+}).merge(ProjectOverride);
 
 const ListTestResultAttachmentsSchema = z.object({
   runId: z.number().int().positive().describe('Test run ID'),
   resultId: z.number().int().positive().describe('Test result ID'),
-});
+}).merge(ProjectOverride);
 
 const DeleteAttachmentSchema = z.object({
   runId: z.number().int().positive().describe('Test run ID'),
   attachmentId: z.number().int().positive().describe('Attachment ID'),
   confirmDelete: z.boolean().optional().default(false).describe('Required to delete an attachment'),
-});
+}).merge(ProjectOverride);
 
 const DeleteResultAttachmentSchema = DeleteAttachmentSchema.extend({
   resultId: z.number().int().positive().describe('Test result ID'),
@@ -128,7 +132,7 @@ const DeleteResultAttachmentSchema = DeleteAttachmentSchema.extend({
 
 const GetTestConfigurationSchema = z.object({
   configurationId: z.number().int().positive().describe('Test configuration ID'),
-});
+}).merge(ProjectOverride);
 
 const ConfigurationValueSchema = z.object({
   name: z.string().min(1),
@@ -140,7 +144,7 @@ const CreateTestConfigurationSchema = z.object({
   description: z.string().optional(),
   values: z.array(ConfigurationValueSchema).min(1).describe('Configuration variable values'),
   state: z.string().optional().default('active'),
-});
+}).merge(ProjectOverride);
 
 const UpdateTestConfigurationSchema = z.object({
   configurationId: z.number().int().positive().describe('Test configuration ID'),
@@ -148,12 +152,12 @@ const UpdateTestConfigurationSchema = z.object({
   description: z.string().optional(),
   values: z.array(ConfigurationValueSchema).optional(),
   state: z.string().optional(),
-});
+}).merge(ProjectOverride);
 
 const DeleteTestConfigurationSchema = z.object({
   configurationId: z.number().int().positive().describe('Test configuration ID'),
   confirmDelete: z.boolean().optional().default(false).describe('Required to delete a test configuration'),
-});
+}).merge(ProjectOverride);
 
 function compactBody<T extends Record<string, unknown>>(body: T): Partial<T> {
   return Object.fromEntries(Object.entries(body).filter(([, value]) => value !== undefined)) as Partial<T>;
@@ -178,14 +182,14 @@ function attachmentBody(args: z.infer<typeof TestAttachmentBodySchema>): Record<
 }
 
 async function getTestSuite(args: z.infer<typeof GetTestSuiteSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.testApiUrl(`plans/${args.planId}/suites/${args.suiteId}`);
   const result = await client.get<TestSuite>(url, { includeChildSuites: args.includeChildSuites });
   return JSON.stringify(result, null, 2);
 }
 
 async function updateTestSuite(args: z.infer<typeof UpdateTestSuiteSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.testApiUrl(`plans/${args.planId}/suites/${args.suiteId}`);
   const body: Record<string, unknown> = compactBody({
     name: args.name,
@@ -202,7 +206,7 @@ async function updateTestSuite(args: z.infer<typeof UpdateTestSuiteSchema>): Pro
 
 async function deleteTestSuite(args: z.infer<typeof DeleteTestSuiteSchema>): Promise<string> {
   if (!args.confirmDelete) throw new Error('confirmDelete=true is required to delete a test suite.');
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.testApiUrl(`plans/${args.planId}/suites/${args.suiteId}`);
   const result = await client.delete<unknown>(url);
   log.info('Deleted test suite #' + args.suiteId + ' from plan #' + args.planId);
@@ -210,7 +214,7 @@ async function deleteTestSuite(args: z.infer<typeof DeleteTestSuiteSchema>): Pro
 }
 
 async function createRequirementSuite(args: z.infer<typeof CreateRequirementSuiteSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.testApiUrl(`plans/${args.planId}/suites/${args.parentSuiteId}`);
   const result = await client.post<TestSuite | TfsListResponse<TestSuite>>(url, {
     suiteType: 'RequirementTestSuite',
@@ -221,7 +225,7 @@ async function createRequirementSuite(args: z.infer<typeof CreateRequirementSuit
 }
 
 async function createQuerySuite(args: z.infer<typeof CreateQuerySuiteSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.testApiUrl(`plans/${args.planId}/suites/${args.parentSuiteId}`);
   const result = await client.post<TestSuite | TfsListResponse<TestSuite>>(url, {
     suiteType: 'DynamicTestSuite',
@@ -233,7 +237,7 @@ async function createQuerySuite(args: z.infer<typeof CreateQuerySuiteSchema>): P
 }
 
 async function updateTestPoint(args: z.infer<typeof UpdateTestPointSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.testApiUrl(`plans/${args.planId}/suites/${args.suiteId}/points/${args.pointId}`);
   const body: Record<string, unknown> = compactBody({
     outcome: args.resetToActive ? 'NotExecuted' : args.outcome,
@@ -246,7 +250,7 @@ async function updateTestPoint(args: z.infer<typeof UpdateTestPointSchema>): Pro
 }
 
 async function getTestRun(args: z.infer<typeof GetTestRunSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.testApiUrl('runs/' + args.runId);
   const result = await client.get<TestRun>(url, { includeDetails: args.includeDetails });
   return JSON.stringify(result, null, 2);
@@ -254,7 +258,7 @@ async function getTestRun(args: z.infer<typeof GetTestRunSchema>): Promise<strin
 
 async function deleteTestRun(args: z.infer<typeof DeleteTestRunSchema>): Promise<string> {
   if (!args.confirmDelete) throw new Error('confirmDelete=true is required to delete a test run.');
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.testApiUrl('runs/' + args.runId);
   const result = await client.delete<unknown>(url);
   log.info('Deleted test run #' + args.runId);
@@ -262,7 +266,7 @@ async function deleteTestRun(args: z.infer<typeof DeleteTestRunSchema>): Promise
 }
 
 async function getTestResult(args: z.infer<typeof GetTestResultSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.testApiUrl(`runs/${args.runId}/results/${args.resultId}`);
   const params = args.detailsToInclude ? { detailsToInclude: args.detailsToInclude } : undefined;
   const result = await client.get<TestResult>(url, params);
@@ -270,14 +274,14 @@ async function getTestResult(args: z.infer<typeof GetTestResultSchema>): Promise
 }
 
 async function getTestResultHistory(args: z.infer<typeof GetTestResultHistorySchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.testApiUrl(`runs/${args.runId}/results/${args.resultId}/history`);
   const result = await client.get<unknown>(url);
   return JSON.stringify(result, null, 2);
 }
 
 async function addTestRunAttachment(args: z.infer<typeof TestRunAttachmentSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.testApiUrl(`runs/${args.runId}/attachments`);
   const result = await client.post<unknown>(url, attachmentBody(args));
   log.info('Added attachment to test run #' + args.runId);
@@ -285,7 +289,7 @@ async function addTestRunAttachment(args: z.infer<typeof TestRunAttachmentSchema
 }
 
 async function listTestRunAttachments(args: z.infer<typeof ListTestRunAttachmentsSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.testApiUrl(`runs/${args.runId}/attachments`);
   const result = await client.get<TfsListResponse<unknown>>(url);
   return JSON.stringify(result, null, 2);
@@ -293,7 +297,7 @@ async function listTestRunAttachments(args: z.infer<typeof ListTestRunAttachment
 
 async function deleteTestRunAttachment(args: z.infer<typeof DeleteAttachmentSchema>): Promise<string> {
   if (!args.confirmDelete) throw new Error('confirmDelete=true is required to delete a test run attachment.');
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.testApiUrl(`runs/${args.runId}/attachments/${args.attachmentId}`);
   const result = await client.delete<unknown>(url);
   log.info('Deleted attachment #' + args.attachmentId + ' from test run #' + args.runId);
@@ -301,7 +305,7 @@ async function deleteTestRunAttachment(args: z.infer<typeof DeleteAttachmentSche
 }
 
 async function addTestResultAttachment(args: z.infer<typeof TestResultAttachmentSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.testApiUrl(`runs/${args.runId}/results/${args.resultId}/attachments`);
   const result = await client.post<unknown>(url, attachmentBody(args));
   log.info('Added attachment to test result #' + args.resultId + ' in run #' + args.runId);
@@ -309,7 +313,7 @@ async function addTestResultAttachment(args: z.infer<typeof TestResultAttachment
 }
 
 async function listTestResultAttachments(args: z.infer<typeof ListTestResultAttachmentsSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.testApiUrl(`runs/${args.runId}/results/${args.resultId}/attachments`);
   const result = await client.get<TfsListResponse<unknown>>(url);
   return JSON.stringify(result, null, 2);
@@ -317,7 +321,7 @@ async function listTestResultAttachments(args: z.infer<typeof ListTestResultAtta
 
 async function deleteTestResultAttachment(args: z.infer<typeof DeleteResultAttachmentSchema>): Promise<string> {
   if (!args.confirmDelete) throw new Error('confirmDelete=true is required to delete a test result attachment.');
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.testApiUrl(`runs/${args.runId}/results/${args.resultId}/attachments/${args.attachmentId}`);
   const result = await client.delete<unknown>(url);
   log.info('Deleted attachment #' + args.attachmentId + ' from test result #' + args.resultId);
@@ -325,14 +329,14 @@ async function deleteTestResultAttachment(args: z.infer<typeof DeleteResultAttac
 }
 
 async function getTestConfiguration(args: z.infer<typeof GetTestConfigurationSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.testApiUrl('configurations/' + args.configurationId);
   const result = await client.get<TestConfiguration>(url, { 'api-version': '4.1-preview' });
   return JSON.stringify(result, null, 2);
 }
 
 async function createTestConfiguration(args: z.infer<typeof CreateTestConfigurationSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.testApiUrl('configurations');
   const result = await client.post<TestConfiguration>(url, {
     name: args.name,
@@ -345,7 +349,7 @@ async function createTestConfiguration(args: z.infer<typeof CreateTestConfigurat
 }
 
 async function updateTestConfiguration(args: z.infer<typeof UpdateTestConfigurationSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.testApiUrl('configurations/' + args.configurationId);
   const body = compactBody({
     name: args.name,
@@ -361,7 +365,7 @@ async function updateTestConfiguration(args: z.infer<typeof UpdateTestConfigurat
 
 async function deleteTestConfiguration(args: z.infer<typeof DeleteTestConfigurationSchema>): Promise<string> {
   if (!args.confirmDelete) throw new Error('confirmDelete=true is required to delete a test configuration.');
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.testApiUrl('configurations/' + args.configurationId);
   const result = await client.delete<unknown>(url, { 'api-version': '4.1-preview' });
   log.info('Deleted test configuration #' + args.configurationId);
