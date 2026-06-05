@@ -7,9 +7,13 @@ import type { GitPullRequest, GitRef, GitRepository, TfsListResponse } from '../
 
 const log = createChildLogger('tool:git-advanced');
 
+const ProjectOverride = z.object({
+  projectIdOrName: z.string().optional().describe('Project ID or name. Defaults to configured project.'),
+});
+
 const RepositorySchema = z.object({
   repositoryId: z.string().min(1).describe('Repository name or GUID'),
-});
+}).merge(ProjectOverride);
 
 const CreateRepoSchema = z.object({
   name: z.string().min(1).describe('Repository name'),
@@ -190,7 +194,7 @@ const PullRequestWorkItemSchema = PullRequestSchema.extend({
 const ZERO_OBJECT_ID = '0000000000000000000000000000000000000000';
 
 async function createRepository(args: z.infer<typeof CreateRepoSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectId);
   const url = client.projectApiUrl('git/repositories', '');
   const body: Record<string, unknown> = { name: args.name };
   if (args.projectId) body.project = { id: args.projectId };
@@ -200,7 +204,7 @@ async function createRepository(args: z.infer<typeof CreateRepoSchema>): Promise
 }
 
 async function updateRepository(args: z.infer<typeof UpdateRepoSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('git/repositories', args.repositoryId);
   const body: Record<string, unknown> = {};
   if (args.name !== undefined) body.name = args.name;
@@ -213,7 +217,7 @@ async function updateRepository(args: z.infer<typeof UpdateRepoSchema>): Promise
 
 async function deleteRepository(args: z.infer<typeof DeleteRepoSchema>): Promise<string> {
   if (!args.confirmDelete) throw new Error('confirmDelete=true is required to delete a Git repository.');
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('git/repositories', args.repositoryId);
   const result = await client.delete<unknown>(url);
   log.info('Deleted Git repository ' + args.repositoryId);
@@ -221,7 +225,7 @@ async function deleteRepository(args: z.infer<typeof DeleteRepoSchema>): Promise
 }
 
 async function listRefs(args: z.infer<typeof ListRefsSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('git/repositories', args.repositoryId + '/refs');
   const params: Record<string, unknown> = { $top: args.top };
   if (args.filter) params.filter = args.filter;
@@ -230,7 +234,7 @@ async function listRefs(args: z.infer<typeof ListRefsSchema>): Promise<string> {
 }
 
 async function getRef(args: z.infer<typeof GetRefSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('git/repositories', args.repositoryId + '/refs');
   const result = await client.get<TfsListResponse<GitRef>>(url, { filter: args.filter, $top: 1 });
   return JSON.stringify(result, null, 2);
@@ -238,7 +242,7 @@ async function getRef(args: z.infer<typeof GetRefSchema>): Promise<string> {
 
 async function updateRefs(args: z.infer<typeof UpdateRefsSchema>): Promise<string> {
   if (!args.confirmUpdate) throw new Error('confirmUpdate=true is required to update Git refs.');
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('git/repositories', args.repositoryId + '/refs');
   const result = await client.post<TfsListResponse<GitRef>>(url, args.refUpdates);
   log.info('Updated ' + args.refUpdates.length + ' Git ref(s) in repository ' + args.repositoryId);
@@ -272,14 +276,14 @@ async function deleteBranch(args: z.infer<typeof DeleteBranchSchema>): Promise<s
 }
 
 async function listPushes(args: z.infer<typeof ListPushesSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('git/repositories', args.repositoryId + '/pushes');
   const result = await client.get<TfsListResponse<unknown>>(url, { $top: args.top, $skip: args.skip });
   return JSON.stringify(result, null, 2);
 }
 
 async function getPush(args: z.infer<typeof PushIdSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('git/repositories', args.repositoryId + '/pushes/' + args.pushId);
   const result = await client.get<unknown>(url);
   return JSON.stringify(result, null, 2);
@@ -287,7 +291,7 @@ async function getPush(args: z.infer<typeof PushIdSchema>): Promise<string> {
 
 async function createPush(args: z.infer<typeof CreatePushSchema>): Promise<string> {
   if (!args.confirmCreate) throw new Error('confirmCreate=true is required to create a push.');
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('git/repositories', args.repositoryId + '/pushes');
   const result = await client.post<unknown>(url, args.push);
   log.info('Created Git push in repository ' + args.repositoryId);
@@ -295,14 +299,14 @@ async function createPush(args: z.infer<typeof CreatePushSchema>): Promise<strin
 }
 
 async function getCommitChanges(args: z.infer<typeof CommitChangesSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('git/repositories', args.repositoryId + '/commits/' + args.commitId + '/changes');
   const result = await client.get<unknown>(url, { $top: args.top, $skip: args.skip });
   return JSON.stringify(result, null, 2);
 }
 
 async function getDiffs(args: z.infer<typeof DiffsSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('git/repositories', args.repositoryId + '/diffs/commits');
   const result = await client.get<unknown>(url, {
     'baseVersionDescriptor.version': args.baseVersion,
@@ -316,7 +320,7 @@ async function getDiffs(args: z.infer<typeof DiffsSchema>): Promise<string> {
 }
 
 async function getBlob(args: z.infer<typeof BlobSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('git/repositories', args.repositoryId + '/blobs/' + args.objectId);
   const bytes = await client.getRaw(url);
   return JSON.stringify({
@@ -327,14 +331,14 @@ async function getBlob(args: z.infer<typeof BlobSchema>): Promise<string> {
 }
 
 async function getTree(args: z.infer<typeof TreeSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('git/repositories', args.repositoryId + '/trees/' + args.objectId);
   const result = await client.get<unknown>(url, { recursive: args.recursive });
   return JSON.stringify(result, null, 2);
 }
 
 async function downloadZip(args: z.infer<typeof DownloadZipSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('git/repositories', args.repositoryId + '/items');
   const params: Record<string, unknown> = {
     scopePath: args.path,
@@ -353,7 +357,7 @@ async function downloadZip(args: z.infer<typeof DownloadZipSchema>): Promise<str
 
 async function createPullRequest(args: z.infer<typeof CreatePullRequestSchema>): Promise<string> {
   if (!args.confirmCreate) throw new Error('confirmCreate=true is required to create a pull request.');
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('git/repositories', args.repositoryId + '/pullrequests');
   const result = await client.post<GitPullRequest>(url, {
     sourceRefName: args.sourceRefName,
@@ -369,7 +373,7 @@ async function createPullRequest(args: z.infer<typeof CreatePullRequestSchema>):
 
 async function updatePullRequest(args: z.infer<typeof UpdatePullRequestSchema>): Promise<string> {
   if (!args.confirmUpdate) throw new Error('confirmUpdate=true is required to update a pull request.');
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('git/repositories', args.repositoryId + '/pullrequests/' + args.pullRequestId);
   const result = await client.patch<GitPullRequest>(url, args.body);
   log.info('Updated pull request #' + args.pullRequestId);
@@ -395,14 +399,14 @@ async function abandonPullRequest(args: z.infer<typeof AbandonPullRequestSchema>
 }
 
 async function listThreads(args: z.infer<typeof PullRequestSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('git/repositories', args.repositoryId + '/pullrequests/' + args.pullRequestId + '/threads');
   const result = await client.get<TfsListResponse<unknown>>(url);
   return JSON.stringify(result, null, 2);
 }
 
 async function getThread(args: z.infer<typeof ThreadSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('git/repositories', args.repositoryId + '/pullrequests/' + args.pullRequestId + '/threads/' + args.threadId);
   const result = await client.get<unknown>(url);
   return JSON.stringify(result, null, 2);
@@ -410,7 +414,7 @@ async function getThread(args: z.infer<typeof ThreadSchema>): Promise<string> {
 
 async function createThread(args: z.infer<typeof CreateThreadSchema>): Promise<string> {
   if (!args.confirmCreate) throw new Error('confirmCreate=true is required to create a pull request thread.');
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('git/repositories', args.repositoryId + '/pullrequests/' + args.pullRequestId + '/threads');
   const result = await client.post<unknown>(url, args.thread);
   log.info('Created thread on pull request #' + args.pullRequestId);
@@ -419,7 +423,7 @@ async function createThread(args: z.infer<typeof CreateThreadSchema>): Promise<s
 
 async function updateThread(args: z.infer<typeof UpdateThreadSchema>): Promise<string> {
   if (!args.confirmUpdate) throw new Error('confirmUpdate=true is required to update a pull request thread.');
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('git/repositories', args.repositoryId + '/pullrequests/' + args.pullRequestId + '/threads/' + args.threadId);
   const result = await client.patch<unknown>(url, args.body);
   log.info('Updated thread #' + args.threadId + ' on pull request #' + args.pullRequestId);
@@ -428,7 +432,7 @@ async function updateThread(args: z.infer<typeof UpdateThreadSchema>): Promise<s
 
 async function addComment(args: z.infer<typeof AddCommentSchema>): Promise<string> {
   if (!args.confirmCreate) throw new Error('confirmCreate=true is required to add a pull request comment.');
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('git/repositories', args.repositoryId + '/pullrequests/' + args.pullRequestId + '/threads/' + args.threadId + '/comments');
   const result = await client.post<unknown>(url, {
     content: args.content,
@@ -441,7 +445,7 @@ async function addComment(args: z.infer<typeof AddCommentSchema>): Promise<strin
 
 async function updateComment(args: z.infer<typeof UpdateCommentSchema>): Promise<string> {
   if (!args.confirmUpdate) throw new Error('confirmUpdate=true is required to update a pull request comment.');
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('git/repositories', args.repositoryId + '/pullrequests/' + args.pullRequestId + '/threads/' + args.threadId + '/comments/' + args.commentId);
   const body: Record<string, unknown> = {};
   if (args.content !== undefined) body.content = args.content;
@@ -459,7 +463,7 @@ async function deleteComment(args: z.infer<typeof DeleteCommentSchema>): Promise
 
 async function addReviewer(args: z.infer<typeof AddReviewerSchema>): Promise<string> {
   if (!args.confirmAdd) throw new Error('confirmAdd=true is required to add a pull request reviewer.');
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('git/repositories', args.repositoryId + '/pullrequests/' + args.pullRequestId + '/reviewers/' + encodeURIComponent(args.reviewerId));
   const result = await client.put<unknown>(url, args.reviewer ?? {});
   log.info('Added reviewer ' + args.reviewerId + ' to pull request #' + args.pullRequestId);
@@ -468,7 +472,7 @@ async function addReviewer(args: z.infer<typeof AddReviewerSchema>): Promise<str
 
 async function removeReviewer(args: z.infer<typeof RemoveReviewerSchema>): Promise<string> {
   if (!args.confirmRemove) throw new Error('confirmRemove=true is required to remove a pull request reviewer.');
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('git/repositories', args.repositoryId + '/pullrequests/' + args.pullRequestId + '/reviewers/' + encodeURIComponent(args.reviewerId));
   const result = await client.delete<unknown>(url);
   log.info('Removed reviewer ' + args.reviewerId + ' from pull request #' + args.pullRequestId);
@@ -477,7 +481,7 @@ async function removeReviewer(args: z.infer<typeof RemoveReviewerSchema>): Promi
 
 async function votePullRequest(args: z.infer<typeof VoteSchema>): Promise<string> {
   if (!args.confirmVote) throw new Error('confirmVote=true is required to vote on a pull request.');
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('git/repositories', args.repositoryId + '/pullrequests/' + args.pullRequestId + '/reviewers/' + encodeURIComponent(args.reviewerId));
   const result = await client.put<unknown>(url, { vote: args.vote });
   log.info('Set vote ' + args.vote + ' for reviewer ' + args.reviewerId + ' on pull request #' + args.pullRequestId);
@@ -485,7 +489,7 @@ async function votePullRequest(args: z.infer<typeof VoteSchema>): Promise<string
 }
 
 async function getPullRequestWorkItems(args: z.infer<typeof PullRequestSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('git/repositories', args.repositoryId + '/pullrequests/' + args.pullRequestId + '/workitems');
   const result = await client.get<TfsListResponse<unknown>>(url);
   return JSON.stringify(result, null, 2);
@@ -493,7 +497,7 @@ async function getPullRequestWorkItems(args: z.infer<typeof PullRequestSchema>):
 
 async function addPullRequestWorkItem(args: z.infer<typeof PullRequestWorkItemSchema>): Promise<string> {
   if (!args.confirmAdd) throw new Error('confirmAdd=true is required to link a work item to a pull request.');
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('git/repositories', args.repositoryId + '/pullrequests/' + args.pullRequestId + '/workitems/' + args.workItemId);
   const result = await client.post<unknown>(url, {});
   log.info('Linked work item #' + args.workItemId + ' to pull request #' + args.pullRequestId);
