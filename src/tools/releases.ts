@@ -8,19 +8,23 @@ import type { TfsListResponse } from '../types/tfs.js';
 const log = createChildLogger('tool:releases');
 const RELEASE_API_VERSION = '4.1-preview';
 
+const ProjectOverride = z.object({
+  projectIdOrName: z.string().optional().describe('Project ID or name. Defaults to configured project.'),
+});
+
 const ListReleaseDefinitionsSchema = z.object({
   searchText: z.string().optional().describe('Filter release definitions by name/text'),
   path: z.string().optional().describe('Folder path filter'),
   top: z.number().int().positive().max(200).optional().default(50),
-});
+}).merge(ProjectOverride);
 
 const ReleaseDefinitionIdSchema = z.object({
   definitionId: z.number().int().positive().describe('Release definition ID'),
-});
+}).merge(ProjectOverride);
 
 const CreateReleaseDefinitionSchema = z.object({
   definition: z.record(z.unknown()).describe('Full release definition JSON body expected by TFS'),
-});
+}).merge(ProjectOverride);
 
 const UpdateReleaseDefinitionSchema = ReleaseDefinitionIdSchema.extend({
   definition: z.record(z.unknown()).describe('Full release definition JSON body expected by TFS'),
@@ -36,11 +40,11 @@ const ListReleasesSchema = z.object({
   statusFilter: z.string().optional().describe('Optional status filter supported by TFS'),
   searchText: z.string().optional().describe('Filter by release name/text'),
   top: z.number().int().positive().max(200).optional().default(50),
-});
+}).merge(ProjectOverride);
 
 const ReleaseIdSchema = z.object({
   releaseId: z.number().int().positive().describe('Release ID'),
-});
+}).merge(ProjectOverride);
 
 const GetReleaseSchema = ReleaseIdSchema.extend({
   expand: z.string().optional().describe('Optional $expand value, e.g. environments, artifacts, approvals'),
@@ -54,7 +58,7 @@ const CreateReleaseSchema = z.object({
   isDraft: z.boolean().optional().default(false),
   reason: z.string().optional().describe('Audit reason/comment for creating the release'),
   confirmCreate: z.boolean().optional().default(false).describe('Required to create a release'),
-});
+}).merge(ProjectOverride);
 
 const UpdateReleaseSchema = ReleaseIdSchema.extend({
   body: z.record(z.unknown()).describe('Partial release update JSON body expected by TFS'),
@@ -82,11 +86,11 @@ const ListDeploymentsSchema = z.object({
   deploymentStatus: z.string().optional(),
   operationStatus: z.string().optional(),
   top: z.number().int().positive().max(200).optional().default(50),
-});
+}).merge(ProjectOverride);
 
 const DeploymentIdSchema = z.object({
   deploymentId: z.number().int().positive().describe('Deployment ID'),
-});
+}).merge(ProjectOverride);
 
 const ListApprovalsSchema = z.object({
   assignedToFilter: z.string().optional().describe('Approver identity filter'),
@@ -94,11 +98,11 @@ const ListApprovalsSchema = z.object({
   typeFilter: z.string().optional().describe('Approval type filter, e.g. preDeploy, postDeploy'),
   releaseIdsFilter: z.array(z.number().int().positive()).optional().describe('Release IDs filter'),
   top: z.number().int().positive().max(200).optional().default(50),
-});
+}).merge(ProjectOverride);
 
 const ApprovalIdSchema = z.object({
   approvalId: z.number().int().positive().describe('Approval ID'),
-});
+}).merge(ProjectOverride);
 
 const UpdateApprovalSchema = ApprovalIdSchema.extend({
   status: z.string().describe('Approval status to set, e.g. approved, rejected, reassigned'),
@@ -120,7 +124,7 @@ function releaseParams(extra: Record<string, unknown> = {}): Record<string, unkn
 }
 
 async function listReleaseDefinitions(args: z.infer<typeof ListReleaseDefinitionsSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('release/definitions', '');
   const params: Record<string, unknown> = { $top: args.top };
   if (args.searchText) params.searchText = args.searchText;
@@ -130,14 +134,14 @@ async function listReleaseDefinitions(args: z.infer<typeof ListReleaseDefinition
 }
 
 async function getReleaseDefinition(args: z.infer<typeof ReleaseDefinitionIdSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('release/definitions', String(args.definitionId));
   const result = await client.get<unknown>(url, releaseParams());
   return JSON.stringify(result, null, 2);
 }
 
 async function createReleaseDefinition(args: z.infer<typeof CreateReleaseDefinitionSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('release/definitions', '');
   const result = await client.post<unknown>(url, args.definition, releaseParams());
   log.info('Created release definition');
@@ -145,7 +149,7 @@ async function createReleaseDefinition(args: z.infer<typeof CreateReleaseDefinit
 }
 
 async function updateReleaseDefinition(args: z.infer<typeof UpdateReleaseDefinitionSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('release/definitions', String(args.definitionId));
   const result = await client.put<unknown>(url, args.definition, releaseParams());
   log.info('Updated release definition #' + args.definitionId);
@@ -154,7 +158,7 @@ async function updateReleaseDefinition(args: z.infer<typeof UpdateReleaseDefinit
 
 async function deleteReleaseDefinition(args: z.infer<typeof DeleteReleaseDefinitionSchema>): Promise<string> {
   if (!args.confirmDelete) throw new Error('confirmDelete=true is required to delete a release definition.');
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('release/definitions', String(args.definitionId));
   const result = await client.delete<unknown>(url, releaseParams(args.comment ? { comment: args.comment } : {}));
   log.info('Deleted release definition #' + args.definitionId);
@@ -162,7 +166,7 @@ async function deleteReleaseDefinition(args: z.infer<typeof DeleteReleaseDefinit
 }
 
 async function listReleases(args: z.infer<typeof ListReleasesSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('release/releases', '');
   const params: Record<string, unknown> = { $top: args.top };
   if (args.definitionId) params.definitionId = args.definitionId;
@@ -173,7 +177,7 @@ async function listReleases(args: z.infer<typeof ListReleasesSchema>): Promise<s
 }
 
 async function getRelease(args: z.infer<typeof GetReleaseSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('release/releases', String(args.releaseId));
   const result = await client.get<unknown>(url, releaseParams(args.expand ? { '$expand': args.expand } : {}));
   return JSON.stringify(result, null, 2);
@@ -181,7 +185,7 @@ async function getRelease(args: z.infer<typeof GetReleaseSchema>): Promise<strin
 
 async function createRelease(args: z.infer<typeof CreateReleaseSchema>): Promise<string> {
   if (!args.confirmCreate) throw new Error('confirmCreate=true is required to create a release.');
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('release/releases', '');
   const result = await client.post<unknown>(url, {
     definitionId: args.definitionId,
@@ -196,7 +200,7 @@ async function createRelease(args: z.infer<typeof CreateReleaseSchema>): Promise
 
 async function updateRelease(args: z.infer<typeof UpdateReleaseSchema>): Promise<string> {
   if (!args.confirmUpdate) throw new Error('confirmUpdate=true is required to update a release.');
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('release/releases', String(args.releaseId));
   const result = await client.patch<unknown>(url, args.body, releaseParams(args.reason ? { comment: args.reason } : {}));
   log.info('Updated release #' + args.releaseId);
@@ -205,7 +209,7 @@ async function updateRelease(args: z.infer<typeof UpdateReleaseSchema>): Promise
 
 async function abandonRelease(args: z.infer<typeof AbandonReleaseSchema>): Promise<string> {
   if (!args.confirmAbandon) throw new Error('confirmAbandon=true is required to abandon a release.');
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('release/releases', String(args.releaseId));
   const result = await client.patch<unknown>(url, {
     status: 'abandoned',
@@ -216,7 +220,7 @@ async function abandonRelease(args: z.infer<typeof AbandonReleaseSchema>): Promi
 }
 
 async function getReleaseEnvironment(args: z.infer<typeof EnvironmentSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('release/releases', args.releaseId + '/environments/' + args.environmentId);
   const result = await client.get<unknown>(url, releaseParams());
   return JSON.stringify(result, null, 2);
@@ -224,7 +228,7 @@ async function getReleaseEnvironment(args: z.infer<typeof EnvironmentSchema>): P
 
 async function updateReleaseEnvironment(args: z.infer<typeof UpdateEnvironmentSchema>): Promise<string> {
   if (!args.confirmUpdate) throw new Error('confirmUpdate=true is required to update a release environment.');
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('release/releases', args.releaseId + '/environments/' + args.environmentId);
   const result = await client.patch<unknown>(url, args.body, releaseParams());
   log.info('Updated release environment #' + args.environmentId + ' in release #' + args.releaseId);
@@ -232,7 +236,7 @@ async function updateReleaseEnvironment(args: z.infer<typeof UpdateEnvironmentSc
 }
 
 async function listDeployments(args: z.infer<typeof ListDeploymentsSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('release/deployments', '');
   const params: Record<string, unknown> = { $top: args.top };
   if (args.definitionId) params.definitionId = args.definitionId;
@@ -244,14 +248,14 @@ async function listDeployments(args: z.infer<typeof ListDeploymentsSchema>): Pro
 }
 
 async function getDeployment(args: z.infer<typeof DeploymentIdSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('release/deployments', String(args.deploymentId));
   const result = await client.get<unknown>(url, releaseParams());
   return JSON.stringify(result, null, 2);
 }
 
 async function listApprovals(args: z.infer<typeof ListApprovalsSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('release/approvals', '');
   const params: Record<string, unknown> = { $top: args.top };
   if (args.assignedToFilter) params.assignedToFilter = args.assignedToFilter;
@@ -263,7 +267,7 @@ async function listApprovals(args: z.infer<typeof ListApprovalsSchema>): Promise
 }
 
 async function getApproval(args: z.infer<typeof ApprovalIdSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('release/approvals', String(args.approvalId));
   const result = await client.get<unknown>(url, releaseParams());
   return JSON.stringify(result, null, 2);
@@ -271,7 +275,7 @@ async function getApproval(args: z.infer<typeof ApprovalIdSchema>): Promise<stri
 
 async function updateApproval(args: z.infer<typeof UpdateApprovalSchema>): Promise<string> {
   if (!args.confirmUpdate) throw new Error('confirmUpdate=true is required to update a release approval.');
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('release/approvals', String(args.approvalId));
   const result = await client.patch<unknown>(url, {
     status: args.status,
@@ -292,7 +296,7 @@ async function rejectRelease(args: z.infer<typeof ApprovalDecisionSchema>): Prom
 }
 
 async function getReleaseLogs(args: z.infer<typeof GetReleaseLogsSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const url = client.projectApiUrl('release/releases', args.releaseId + '/logs');
   const bytes = await client.getRaw(url, releaseParams());
   return JSON.stringify({
