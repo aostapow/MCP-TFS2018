@@ -8,19 +8,23 @@ import type { TfsListResponse } from '../types/tfs.js';
 const log = createChildLogger('tool:integrations');
 const PREVIEW_API_VERSION = '4.1-preview';
 
+const ProjectOverride = z.object({
+  projectIdOrName: z.string().optional().describe('Project ID or name. Defaults to configured project.'),
+});
+
 const EndpointIdSchema = z.object({
   endpointId: z.string().min(1).describe('Service endpoint ID'),
-});
+}).merge(ProjectOverride);
 
 const ListEndpointsSchema = z.object({
   type: z.string().optional().describe('Endpoint type filter'),
   authSchemes: z.string().optional().describe('Auth scheme filter'),
   endpointNames: z.array(z.string()).optional().describe('Endpoint name filters'),
-});
+}).merge(ProjectOverride);
 
 const EndpointBodySchema = z.object({
   body: z.record(z.unknown()).describe('Service endpoint JSON body expected by TFS'),
-});
+}).merge(ProjectOverride);
 
 const UpdateEndpointSchema = EndpointIdSchema.extend({
   body: z.record(z.unknown()).describe('Service endpoint JSON body expected by TFS'),
@@ -77,7 +81,7 @@ async function listServiceEndpointTypes(): Promise<string> {
 }
 
 async function listServiceEndpoints(args: z.infer<typeof ListEndpointsSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const params: Record<string, unknown> = {};
   if (args.type) params.type = args.type;
   if (args.authSchemes) params.authSchemes = args.authSchemes;
@@ -87,13 +91,13 @@ async function listServiceEndpoints(args: z.infer<typeof ListEndpointsSchema>): 
 }
 
 async function getServiceEndpoint(args: z.infer<typeof EndpointIdSchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const result = await client.get<unknown>(client.projectApiUrl('serviceendpoint/endpoints', args.endpointId), previewParams());
   return JSON.stringify(result, null, 2);
 }
 
 async function createServiceEndpoint(args: z.infer<typeof EndpointBodySchema>): Promise<string> {
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const result = await client.post<unknown>(client.projectApiUrl('serviceendpoint/endpoints', ''), args.body, previewParams());
   log.info('Created service endpoint');
   return JSON.stringify(result, null, 2);
@@ -101,7 +105,7 @@ async function createServiceEndpoint(args: z.infer<typeof EndpointBodySchema>): 
 
 async function updateServiceEndpoint(args: z.infer<typeof UpdateEndpointSchema>): Promise<string> {
   if (!args.confirmUpdate) throw new Error('confirmUpdate=true is required to update a service endpoint.');
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const result = await client.put<unknown>(client.projectApiUrl('serviceendpoint/endpoints', args.endpointId), args.body, previewParams());
   log.info('Updated service endpoint ' + args.endpointId);
   return JSON.stringify(result, null, 2);
@@ -109,7 +113,7 @@ async function updateServiceEndpoint(args: z.infer<typeof UpdateEndpointSchema>)
 
 async function deleteServiceEndpoint(args: z.infer<typeof DeleteEndpointSchema>): Promise<string> {
   if (!args.confirmDelete) throw new Error('confirmDelete=true is required to delete a service endpoint.');
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const result = await client.delete<unknown>(client.projectApiUrl('serviceendpoint/endpoints', args.endpointId), previewParams());
   log.info('Deleted service endpoint ' + args.endpointId);
   return JSON.stringify(result ?? { ok: true }, null, 2);
@@ -117,7 +121,7 @@ async function deleteServiceEndpoint(args: z.infer<typeof DeleteEndpointSchema>)
 
 async function executeServiceEndpointRequest(args: z.infer<typeof ExecuteEndpointSchema>): Promise<string> {
   if (!args.confirmExecute) throw new Error('confirmExecute=true is required to execute a service endpoint request.');
-  const client = getTfsClient();
+  const client = getTfsClient().forProject(args.projectIdOrName);
   const resource = args.endpointId + '/executionhistory';
   const result = await client.post<unknown>(client.projectApiUrl('serviceendpoint/endpoints', resource), args.body, previewParams());
   return JSON.stringify(result, null, 2);
