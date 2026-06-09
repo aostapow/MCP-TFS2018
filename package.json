@@ -1,10 +1,11 @@
 {
   "name": "mcp-tfs2018",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "MCP Server for Microsoft Team Foundation Server 2018",
   "main": "dist/index.js",
   "scripts": {
-    "build": "esbuild \"src/**/*.ts\" \"src/*.ts\" --outdir=dist --platform=node --target=node20 --format=cjs",
+    "build": "node scripts/build.mjs",
+    "update": "node scripts/update.mjs",
     "dev": "ts-node src/index.ts",
     "start": "node dist/index.js",
     "setup": "npm run build && node dist/setup.js",
@@ -50,6 +51,9 @@
   "jest": {
     "preset": "ts-jest",
     "testEnvironment": "node",
+    "moduleNameMapper": {
+      "^(\\.{1,2}/.*)\\.js$": "$1"
+    },
     "roots": [
       "<rootDir>/src"
     ],

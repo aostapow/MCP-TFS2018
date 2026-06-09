@@ -22,6 +22,8 @@ import { registerDashboardPackagingTools } from './tools/dashboards-packaging.js
 import { registerRestTools } from './tools/rest.js';
 import { createChildLogger } from './utils/logger.js';
 import { formatErrorForMcp } from './utils/errors.js';
+import { APP_VERSION, REPO_SLUG } from './version.js';
+import { checkForUpdates } from './utils/version-check.js';
 
 const log = createChildLogger('server');
 
@@ -64,7 +66,7 @@ export function createServer(): McpServer {
   const config = getConfig();
 
   const server = new McpServer(
-    { name: 'mcp-tfs2018', version: '1.0.0' },
+    { name: 'mcp-tfs2018', version: APP_VERSION },
     { capabilities: { tools: {} } },
   );
 
@@ -91,6 +93,32 @@ export function createServer(): McpServer {
           project: cfg.project,
           apiVersion: cfg.apiVersion,
           authType: cfg.auth.type,
+        };
+        return { content: [{ type: 'text' as const, text: JSON.stringify(info, null, 2) }] };
+      } catch (err) {
+        return { content: [{ type: 'text' as const, text: formatErrorForMcp(err) }], isError: true };
+      }
+    },
+  );
+
+  server.tool(
+    'tfs_get_server_info',
+    'Returns MCP server version, Node.js runtime info, and whether a newer release is available on GitHub.',
+    {},
+    async () => {
+      try {
+        const updateInfo = await checkForUpdates({ force: true });
+        const info = {
+          mcpServerName: 'mcp-tfs2018',
+          mcpServerVersion: APP_VERSION,
+          nodeVersion: process.version,
+          installPath: process.cwd(),
+          updateAvailable: updateInfo.updateAvailable,
+          latestVersion: updateInfo.latest,
+          releaseUrl: updateInfo.releaseUrl ?? `https://github.com/${REPO_SLUG}/releases/latest`,
+          releaseNotes: updateInfo.releaseNotes,
+          updateCommand: 'npm run update',
+          repository: `https://github.com/${REPO_SLUG}`,
         };
         return { content: [{ type: 'text' as const, text: JSON.stringify(info, null, 2) }] };
       } catch (err) {

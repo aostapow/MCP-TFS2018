@@ -9,6 +9,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { createServer } from './server.js';
 import { logger } from './utils/logger.js';
 import { TfsConfigError } from './utils/errors.js';
+import { notifyIfUpdateAvailable } from './utils/version-check.js';
 
 async function main(): Promise<void> {
   // Validate config eagerly so we fail fast with a clear message
@@ -31,6 +32,7 @@ async function main(): Promise<void> {
     const stdioTransport = new StdioServerTransport();
     await server.connect(stdioTransport);
     logger.info('MCP TFS 2018 server running — waiting for requests');
+    void notifyIfUpdateAvailable();
   } else {
     // HTTP/SSE transport — requires @modelcontextprotocol/sdk >= 1.1
     logger.error(`Transport "${transport}" is not yet supported in this build. Use MCP_TRANSPORT=stdio.`);

@@ -1,0 +1,70 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install and build
+        run: |
+          npm ci
+          npm run build
+
+      - name: Extract version from tag
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Extract changelog section
+        id: changelog
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          SECTION=$(awk -v ver="$VERSION" '
+            /^\#\# \[/ {
+              if ($0 ~ "\\[" ver "\\]") { found=1; next }
+              if (found) exit
+            }
+            found { print }
+          ' CHANGELOG.md)
+          if [ -z "$SECTION" ]; then
+            SECTION="Release v${VERSION}"
+          fi
+          {
+            echo "body<<EOF"
+            echo "$SECTION"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create release zip
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          ZIP_NAME="MCP-TFS2018-v${VERSION}.zip"
+          zip -r "$ZIP_NAME" . \
+            -x "*.git*" \
+            -x "node_modules/*" \
+            -x ".env" \
+            -x "*.zip"
+          echo "ZIP_NAME=$ZIP_NAME" >> "$GITHUB_ENV"
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: v${{ steps.version.outputs.version }}
+          body: ${{ steps.changelog.outputs.body }}
+          files: ${{ env.ZIP_NAME }}
+          generate_release_notes: true

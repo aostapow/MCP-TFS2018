@@ -33,6 +33,10 @@ const envSchema = z.object({
   // Logging
   LOG_LEVEL: z.enum(['error', 'warn', 'info', 'http', 'debug']).default('info'),
   LOG_FORMAT: z.enum(['json', 'pretty']).default('pretty'),
+
+  // Update check
+  MCP_TFS_UPDATE_CHECK: z.coerce.boolean().default(true),
+  MCP_TFS_UPDATE_URL: z.string().url().optional(),
 });
 
 type Env = z.infer<typeof envSchema>;
@@ -107,6 +111,27 @@ export function getConfig(): TfsConfig {
 
 export function resetConfig(): void {
   _config = null;
+}
+
+export interface UpdateConfig {
+  enabled: boolean;
+  url?: string;
+}
+
+let _updateConfig: UpdateConfig | null = null;
+
+export function getUpdateConfig(): UpdateConfig {
+  if (_updateConfig) return _updateConfig;
+  const env = parseEnv();
+  _updateConfig = {
+    enabled: env.MCP_TFS_UPDATE_CHECK,
+    url: env.MCP_TFS_UPDATE_URL,
+  };
+  return _updateConfig;
+}
+
+export function resetUpdateConfig(): void {
+  _updateConfig = null;
 }
 
 export function collectionUrl(config: TfsConfig): string {

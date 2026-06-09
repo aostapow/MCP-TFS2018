@@ -107,12 +107,14 @@ mcp-tfs2018/
 | `TFS_PROXY_URL` | — | Proxy HTTP/HTTPS corporativo |
 | `MCP_TRANSPORT` | `stdio` | `stdio` (Claude Desktop) o `http` |
 | `MCP_PORT` | `3000` | Puerto si `MCP_TRANSPORT=http` |
+| `MCP_TFS_UPDATE_CHECK` | `true` | Chequear GitHub Releases al arrancar y avisar si hay version nueva |
+| `MCP_TFS_UPDATE_URL` | — | URL alternativa para el chequeo de releases (mirror interno) |
 | `LOG_LEVEL` | `info` | `error`, `warn`, `info` o `debug` |
 | `LOG_FORMAT` | `pretty` | `pretty` o `json`. Los logs salen por **stderr** (stdout queda libre para JSON-RPC) |
 
-## Tools disponibles (305)
+## Tools disponibles (306)
 
-**Utilidades:** `tfs_ping`, `tfs_list_projects`, `tfs_get_project`, `tfs_list_teams`, `tfs_get_team_members`, `tfs_list_iterations`, `tfs_list_area_paths`, `tfs_search_identities`.
+**Utilidades:** `tfs_ping`, `tfs_get_server_info`, `tfs_list_projects`, `tfs_get_project`, `tfs_list_teams`, `tfs_get_team_members`, `tfs_list_iterations`, `tfs_list_area_paths`, `tfs_search_identities`.
 
 **Work Items:** `tfs_get_work_item`, `tfs_get_work_items`, `tfs_query_work_items`, `tfs_create_work_item`, `tfs_update_work_item`, `tfs_add_work_item_comment`, `tfs_add_work_item_link`, `tfs_remove_work_item_link`, `tfs_get_work_item_history`, `tfs_get_work_item_updates`, `tfs_get_work_item_revisions`, `tfs_get_work_item_revision`, `tfs_delete_work_item`, `tfs_list_deleted_work_items`, `tfs_get_deleted_work_item`, `tfs_restore_work_item`, `tfs_destroy_deleted_work_item`, `tfs_upload_work_item_attachment`, `tfs_get_work_item_attachment`, `tfs_add_work_item_attachment`, `tfs_remove_work_item_attachment`, `tfs_get_work_item_type`, `tfs_list_work_item_types`, `tfs_list_work_item_fields`, `tfs_list_work_item_relation_types`, `tfs_list_work_item_categories`, `tfs_get_work_item_category`, `tfs_list_work_item_tags`, `tfs_get_work_item_tag`, `tfs_create_work_item_tag`, `tfs_delete_work_item_tag`, `tfs_get_saved_queries`, `tfs_run_saved_query`, `tfs_create_saved_query`, `tfs_update_saved_query`, `tfs_delete_saved_query`, `tfs_get_classification_node`, `tfs_create_classification_node`, `tfs_update_classification_node`, `tfs_delete_classification_node`.
 
@@ -146,6 +148,7 @@ mcp-tfs2018/
 npm run build       # Compila TypeScript a dist/ (usando esbuild)
 npm run dev         # Corre directo con ts-node (sin compilar)
 npm start           # node dist/index.js
+npm run update      # git pull + npm ci + build (requiere clone git)
 npm run typecheck   # tsc --noEmit (solo chequeo de tipos)
 npm test            # jest
 npm run lint        # eslint
@@ -153,6 +156,39 @@ npm run clean       # borra dist/
 ```
 
 > **Nota sobre build:** el build usa `esbuild` para evitar el alto consumo de memoria de `tsc` al emitir `dist/`. Para validacion estricta de tipos, usá `npm run typecheck`.
+
+## Actualizaciones
+
+El servidor consulta GitHub Releases al arrancar (en background, sin bloquear). Si hay una version mas reciente, escribe un aviso en **stderr** (visible en los logs de Claude Desktop / Cursor). El aviso se muestra **una sola vez por version nueva**.
+
+**Ver version instalada:**
+- Logs de arranque del MCP
+- Tool `tfs_get_server_info` en el chat (incluye version, Node.js, y si hay update disponible)
+
+**Actualizar (instalacion via git clone):**
+
+```powershell
+cd C:\mcps\tfs2018
+npm run update
+```
+
+Tambien podes usar `scripts\update.ps1`. Reinicia Claude Desktop / Cursor despues de actualizar.
+
+**Actualizar (instalacion via zip):** descarga el zip mas reciente desde [GitHub Releases](https://github.com/aostapow/MCP-TFS2018/releases/latest), extrae sobre la carpeta existente (conserva tu `.env`), y ejecuta `npm ci`.
+
+**Desactivar chequeo de updates:** `MCP_TFS_UPDATE_CHECK=false` en `.env`.
+
+## Publicar una nueva version (maintainers)
+
+1. Actualizar `CHANGELOG.md` y bump `version` en `package.json`
+2. `git commit -m "chore: release v1.1.0"`
+3. `git tag v1.1.0 && git push origin main --tags`
+4. GitHub Actions publica el release con zip adjunto
+
+Convencion SemVer:
+- **PATCH** — bugfixes sin cambios en tools
+- **MINOR** — tools nuevos o parametros opcionales
+- **MAJOR** — breaking changes (rename de tools, cambios requeridos en `.env`)
 
 ## Troubleshooting
 
