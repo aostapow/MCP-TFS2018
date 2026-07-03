@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-07-03
+
+### Added
+- `tfs_add_work_item_link` supports `Microsoft.VSTS.Common.TestedBy-Forward` and `Microsoft.VSTS.Common.TestedBy-Reverse` for Bug ↔ Test Case traceability
+
 ## [1.1.0] - 2026-06-06
 
 ### Added
@@ -23,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Interactive setup wizard (`npm run setup`)
 - `projectIdOrName` override on all project-scoped tools
 
-[Unreleased]: https://github.com/aostapow/MCP-TFS2018/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/aostapow/MCP-TFS2018/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/aostapow/MCP-TFS2018/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/aostapow/MCP-TFS2018/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/aostapow/MCP-TFS2018/releases/tag/v1.0.0

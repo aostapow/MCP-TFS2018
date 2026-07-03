@@ -129,8 +129,10 @@ const AddWorkItemLinkSchema = z.object({
     'System.LinkTypes.Duplicate-Reverse',
     'System.LinkTypes.Dependency-Forward',
     'System.LinkTypes.Dependency-Reverse',
+    'Microsoft.VSTS.Common.TestedBy-Forward',
+    'Microsoft.VSTS.Common.TestedBy-Reverse',
   ]).describe(
-    'Link type. Hierarchy-Forward = parent->child. Hierarchy-Reverse = child->parent. Related = bidirectional.',
+    'Link type. Hierarchy-Forward = parent->child. Hierarchy-Reverse = child->parent. Related = bidirectional. TestedBy-Forward = Bug/requirement tested by Test Case (source=Bug, target=Test Case). TestedBy-Reverse = Test Case tests Bug (source=Test Case, target=Bug).',
   ),
   comment: z.string().optional().describe('Optional comment for the link'),
 });
@@ -557,7 +559,7 @@ export function registerWorkItemTools(server: McpServer): void {
 
   server.tool(
     'tfs_add_work_item_link',
-    'Adds a link (relation) between two work items. Supports parent/child hierarchy, related, duplicate, and dependency link types.',
+    'Adds a link (relation) between two work items. Supports parent/child hierarchy, related, duplicate, dependency, and TestedBy (Bug <-> Test Case) link types.',
     AddWorkItemLinkSchema.shape,
     async (args: z.infer<typeof AddWorkItemLinkSchema>) => {
       try {

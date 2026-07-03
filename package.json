@@ -1,6 +1,6 @@
 {
   "name": "mcp-tfs2018",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "MCP Server for Microsoft Team Foundation Server 2018",
   "main": "dist/index.js",
   "scripts": {
