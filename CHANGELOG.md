@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-07-04
+
+### Added
+- `AGENTS.md` — checklist de instalacion y migracion para agentes de IA
+
+### Changed
+- `README.md` — guia de instalacion ampliada (`npm ci`, `npm run setup`, ejemplo MCP config, troubleshooting auto-update)
+
 ## [1.3.0] - 2026-07-04
 
 ### Added
@@ -44,7 +52,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Interactive setup wizard (`npm run setup`)
 - `projectIdOrName` override on all project-scoped tools
 
-[Unreleased]: https://github.com/aostapow/MCP-TFS2018/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/aostapow/MCP-TFS2018/compare/v1.3.1...HEAD
+[1.3.1]: https://github.com/aostapow/MCP-TFS2018/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/aostapow/MCP-TFS2018/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/aostapow/MCP-TFS2018/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/aostapow/MCP-TFS2018/compare/v1.0.0...v1.1.0
