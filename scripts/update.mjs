@@ -1,45 +1,19 @@
 #!/usr/bin/env node
-import { spawnSync } from 'child_process';
-import { existsSync, readFileSync } from 'fs';
-import { dirname, join } from 'path';
-import { fileURLToPath } from 'url';
+const { runUpdate } = await import('./zip-update.mjs');
 
-const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const REPO_SLUG = 'aostapow/MCP-TFS2018';
+const result = await runUpdate({ force: true });
 
-function run(command, args, options = {}) {
-  const result = spawnSync(command, args, {
-    cwd: root,
-    stdio: 'inherit',
-    shell: process.platform === 'win32',
-    ...options,
-  });
-  if (result.status !== 0) {
-    process.exit(result.status ?? 1);
-  }
+if (result.updated) {
+  process.stderr.write(
+    `Update complete — mcp-tfs2018 v${result.latest}. Restart Claude Desktop / Cursor to load the new version.\n`,
+  );
+  process.exit(0);
 }
 
-function readVersion() {
-  const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
-  return pkg.version ?? 'unknown';
+if (result.reason === 'already-current' || result.reason === 'already-applied') {
+  process.stderr.write(`Already up to date (v${result.latest ?? result.current}).\n`);
+  process.exit(0);
 }
 
-if (!existsSync(join(root, '.git'))) {
-  console.error('This installation is not a git clone (.git folder missing).');
-  console.error(`Download the latest release zip from: https://github.com/${REPO_SLUG}/releases/latest`);
-  process.exit(1);
-}
-
-console.log('Fetching latest changes...');
-run('git', ['fetch', 'origin']);
-run('git', ['checkout', 'main']);
-run('git', ['pull', 'origin', 'main']);
-
-console.log('Installing dependencies...');
-run('npm', ['ci']);
-
-console.log('Building...');
-run('npm', ['run', 'build']);
-
-console.log(`Update complete — mcp-tfs2018 v${readVersion()}`);
-console.log('Restart Claude Desktop / Cursor to load the new version.');
+process.stderr.write(`Update did not complete (${result.reason ?? 'unknown'}).\n`);
+process.exit(result.reason === 'check-failed' || result.reason === 'apply-failed' ? 1 : 0);

@@ -24,6 +24,7 @@ import type { TfsProjectCollection } from './types/tfs.js';
 
 const ROOT = path.resolve(process.cwd());
 const ENV_PATH = path.join(ROOT, '.env');
+const LAUNCHER_PATH = path.join(ROOT, 'scripts', 'launcher.mjs');
 const DIST_INDEX = path.join(ROOT, 'dist', 'index.js');
 
 // ─── Colores ANSI ─────────────────────────────────────────────────────────────
@@ -276,6 +277,7 @@ interface EnvConfig {
   tlsRejectUnauthorized: boolean;
   logLevel: string;
   logFormat: string;
+  autoUpdate: boolean;
 }
 
 function writeEnvFile(cfg: EnvConfig): void {
@@ -314,6 +316,10 @@ function writeEnvFile(cfg: EnvConfig): void {
   lines.push('', '# --- Servidor MCP ---');
   lines.push('MCP_TRANSPORT=stdio');
   lines.push('MCP_PORT=3000');
+  lines.push('');
+  lines.push('# --- Actualizaciones ---');
+  lines.push('MCP_TFS_UPDATE_CHECK=true');
+  lines.push('MCP_TFS_AUTO_UPDATE=' + String(cfg.autoUpdate));
 
   lines.push('', '# --- Logging ---');
   lines.push('LOG_LEVEL=' + cfg.logLevel);
@@ -325,7 +331,7 @@ function writeEnvFile(cfg: EnvConfig): void {
 // ─── Client snippet generator ─────────────────────────────────────────────────
 
 function printClientSnippets(cfg: EnvConfig): void {
-  const distPath = DIST_INDEX.replace(/\\/g, '/');
+  const launcherPath = LAUNCHER_PATH.replace(/\\/g, '/');
 
   const env: Record<string, string> = {
     TFS_BASE_URL:    cfg.baseUrl,
@@ -343,6 +349,7 @@ function printClientSnippets(cfg: EnvConfig): void {
   if (cfg.authType === 'kerberos' && cfg.spn) env.TFS_KERBEROS_SPN = cfg.spn;
   if (!cfg.tlsRejectUnauthorized)  env.TFS_TLS_REJECT_UNAUTHORIZED = 'false';
   if (cfg.proxyUrl)                env.TFS_PROXY_URL = cfg.proxyUrl;
+  env.MCP_TFS_AUTO_UPDATE = String(cfg.autoUpdate);
   env.LOG_LEVEL = cfg.logLevel;
 
   const envJson = JSON.stringify(env, null, 6)
@@ -354,7 +361,7 @@ function printClientSnippets(cfg: EnvConfig): void {
   "mcpServers": {
     "tfs2018": {
       "command": "node",
-      "args": ["${distPath}"],
+      "args": ["${launcherPath}"],
       "env": ${envJson}
     }
   }
@@ -598,6 +605,12 @@ async function main(): Promise<void> {
   const logFormatRaw = logFormats[await choose('Formato de log', logFormats, defaultFmtIdx)];
   const logFormat = logFormatRaw.startsWith('json') ? 'json' : 'pretty';
 
+  const defaultAutoUpdate = (d.MCP_TFS_AUTO_UPDATE ?? 'true') !== 'false';
+  const autoUpdate = await confirm(
+    'Activar auto-actualizacion por zip al arrancar? (requiere scripts/launcher.mjs en la config MCP)',
+    defaultAutoUpdate,
+  );
+
   // ── PASO 7: Resumen y confirmacion ────────────────────────────────────────
   stepHeader(7, TOTAL, 'Resumen de configuracion');
 
@@ -610,6 +623,7 @@ async function main(): Promise<void> {
   if (proxyUrl)             print('  ' + bold('Proxy:')       + '     ' + proxyUrl);
   if (!tlsRejectUnauthorized) print('  ' + bold('TLS:')        + '       Validacion desactivada');
   print('  ' + bold('Log:')         + '       ' + logLevel + ' / ' + logFormat);
+  print('  ' + bold('Auto-update:') + ' ' + (autoUpdate ? 'activado' : 'desactivado'));
   print('');
 
   const save = await confirm('Guardar esta configuracion?', true);
@@ -630,7 +644,7 @@ async function main(): Promise<void> {
     baseUrl, collection, project,
     authType, username, password, domain, pat, spn,
     proxyUrl, tlsRejectUnauthorized,
-    logLevel, logFormat,
+    logLevel, logFormat, autoUpdate,
   };
 
   writeEnvFile(cfg);
@@ -646,7 +660,9 @@ async function main(): Promise<void> {
   separator();
   print(bold(c.green + 'Configuracion completada.' + c.reset));
 
-  if (!fs.existsSync(DIST_INDEX)) {
+  if (!fs.existsSync(LAUNCHER_PATH)) {
+    warn('No se encontro scripts/launcher.mjs.');
+  } else if (!fs.existsSync(DIST_INDEX)) {
     print('');
     warn('El proyecto aun no esta compilado. Ejecuta primero:');
     print(bold('  npm run build'));

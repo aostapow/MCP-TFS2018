@@ -66,8 +66,10 @@ mcp-tfs2018/
 5. **Probar arranque manual:**
 
    ```powershell
-   node dist/index.js
+   npm start
    ```
+
+   (Equivale a `node scripts/launcher.mjs`, que aplica auto-update y arranca el servidor.)
 
    Tiene que mostrar (en stderr):
 
@@ -80,9 +82,11 @@ mcp-tfs2018/
 
    Queda esperando JSON-RPC por stdin. Cerralo con `Ctrl+C`.
 
-6. **Registrar en Claude Desktop:**
+6. **Registrar en Claude Desktop / Cursor:**
 
-   Edita `%APPDATA%\Claude\claude_desktop_config.json` y agrega (o mergea) el bloque `mcpServers` de `claude_desktop_config.example.json`, **ajustando la ruta absoluta** a `dist\index.js` y completando el bloque `env`.
+   Edita `%APPDATA%\Claude\claude_desktop_config.json` o `%USERPROFILE%\.cursor\mcp.json` y agrega (o mergea) el bloque `mcpServers` de `claude_desktop_config.example.json`, **ajustando la ruta absoluta** a `scripts\launcher.mjs` y completando el bloque `env`.
+
+   El launcher aplica actualizaciones zip automaticamente (si `MCP_TFS_AUTO_UPDATE=true`) y luego arranca el servidor MCP.
 
    **Importante:** cerrá Claude Desktop completamente antes de editar (Quit desde la bandeja). Si la app esta corriendo, sobreescribe el archivo al cerrarlo.
 
@@ -108,6 +112,7 @@ mcp-tfs2018/
 | `MCP_TRANSPORT` | `stdio` | `stdio` (Claude Desktop) o `http` |
 | `MCP_PORT` | `3000` | Puerto si `MCP_TRANSPORT=http` |
 | `MCP_TFS_UPDATE_CHECK` | `true` | Chequear GitHub Releases al arrancar y avisar si hay version nueva |
+| `MCP_TFS_AUTO_UPDATE` | `true` | Descargar y aplicar el zip del release antes de arrancar (requiere `scripts/launcher.mjs`) |
 | `MCP_TFS_UPDATE_URL` | — | URL alternativa para el chequeo de releases (mirror interno) |
 | `LOG_LEVEL` | `info` | `error`, `warn`, `info` o `debug` |
 | `LOG_FORMAT` | `pretty` | `pretty` o `json`. Los logs salen por **stderr** (stdout queda libre para JSON-RPC) |
@@ -147,36 +152,54 @@ mcp-tfs2018/
 ```powershell
 npm run build       # Compila TypeScript a dist/ (usando esbuild)
 npm run dev         # Corre directo con ts-node (sin compilar)
-npm start           # node dist/index.js
-npm run update      # git pull + npm ci + build (requiere clone git)
+npm start           # launcher: auto-update zip + node dist/index.js
+npm run update      # descarga zip del ultimo release + npm ci (manual)
 npm run typecheck   # tsc --noEmit (solo chequeo de tipos)
 npm test            # jest
 npm run lint        # eslint
 npm run clean       # borra dist/
 ```
 
-> **Nota sobre build:** el build usa `esbuild` para evitar el alto consumo de memoria de `tsc` al emitir `dist/`. Para validacion estricta de tipos, usá `npm run typecheck`.
+> **Nota sobre build:** el build usa `esbuild` para evitar el alto consumo de memoria de `tsc` al emitir `dist/`. `npm run typecheck` usa hasta 12 GB de heap; puede tardar varios minutos en equipos con muchos tools.
 
 ## Actualizaciones
 
-El servidor consulta GitHub Releases al arrancar (en background, sin bloquear). Si hay una version mas reciente, escribe un aviso en **stderr** (visible en los logs de Claude Desktop / Cursor). El aviso se muestra **una sola vez por version nueva**.
+### Auto-update (recomendado)
+
+Con `MCP_TFS_AUTO_UPDATE=true` (default) y el entry point `scripts/launcher.mjs`, cada vez que Cursor o Claude Desktop inicia el MCP:
+
+1. Consulta GitHub Releases
+2. Si hay una version mas nueva, descarga `MCP-TFS2018-vX.Y.Z.zip`
+3. Extrae sobre la carpeta de instalacion (conserva tu `.env`)
+4. Ejecuta `npm ci`
+5. Arranca el servidor MCP
+
+**Migracion (usuarios existentes):** cambia una sola vez el `args` en tu config MCP de `dist/index.js` a `scripts/launcher.mjs`.
+
+**Reinicio de Cursor:** el disco queda actualizado al terminar el launcher, pero la sesion MCP activa sigue con el proceso anterior hasta reiniciar Cursor o el servidor MCP.
+
+**Desactivar auto-update:** `MCP_TFS_AUTO_UPDATE=false` en `.env`.
+
+### Aviso en logs
+
+Si hay version nueva y el auto-update no pudo aplicarse (o esta desactivado), el servidor escribe un aviso en **stderr** una sola vez por version nueva.
 
 **Ver version instalada:**
 - Logs de arranque del MCP
-- Tool `tfs_get_server_info` en el chat (incluye version, Node.js, y si hay update disponible)
+- Tool `tfs_get_server_info` (version, auto-update, ultima version aplicada, update disponible)
 
-**Actualizar (instalacion via git clone):**
+### Update manual
 
 ```powershell
-cd C:\mcps\tfs2018
+cd C:\ruta\a\mcp-tfs2018
 npm run update
 ```
 
 Tambien podes usar `scripts\update.ps1`. Reinicia Claude Desktop / Cursor despues de actualizar.
 
-**Actualizar (instalacion via zip):** descarga el zip mas reciente desde [GitHub Releases](https://github.com/aostapow/MCP-TFS2018/releases/latest), extrae sobre la carpeta existente (conserva tu `.env`), y ejecuta `npm ci`.
+**Instalacion inicial via zip:** descarga desde [GitHub Releases](https://github.com/aostapow/MCP-TFS2018/releases/latest), extrae, configura `.env`, ejecuta `npm ci`, y registra `scripts/launcher.mjs` en tu cliente MCP.
 
-**Desactivar chequeo de updates:** `MCP_TFS_UPDATE_CHECK=false` en `.env`.
+**Desactivar solo el chequeo de releases:** `MCP_TFS_UPDATE_CHECK=false` en `.env`.
 
 ## Publicar una nueva version (maintainers)
 

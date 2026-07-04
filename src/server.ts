@@ -1,6 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { getConfig } from './config.js';
+import { getConfig, getUpdateConfig } from './config.js';
 import { getTfsClient } from './tfs-client.js';
 import { registerWorkItemTools } from './tools/workitems.js';
 import { registerAdvancedWorkItemTools } from './tools/workitems-advanced.js';
@@ -23,7 +23,7 @@ import { registerRestTools } from './tools/rest.js';
 import { createChildLogger } from './utils/logger.js';
 import { formatErrorForMcp } from './utils/errors.js';
 import { APP_VERSION, REPO_SLUG } from './version.js';
-import { checkForUpdates } from './utils/version-check.js';
+import { checkForUpdates, readLastAppliedVersion } from './utils/version-check.js';
 
 const log = createChildLogger('server');
 
@@ -108,6 +108,8 @@ export function createServer(): McpServer {
     async () => {
       try {
         const updateInfo = await checkForUpdates({ force: true });
+        const updateConfig = getUpdateConfig();
+        const lastApplied = readLastAppliedVersion();
         const info = {
           mcpServerName: 'mcp-tfs2018',
           mcpServerVersion: APP_VERSION,
@@ -117,7 +119,13 @@ export function createServer(): McpServer {
           latestVersion: updateInfo.latest,
           releaseUrl: updateInfo.releaseUrl ?? `https://github.com/${REPO_SLUG}/releases/latest`,
           releaseNotes: updateInfo.releaseNotes,
+          zipAssetUrl: updateInfo.zipAssetUrl,
+          autoUpdateEnabled: updateConfig.autoUpdate,
+          updateCheckEnabled: updateConfig.enabled,
+          lastAppliedVersion: lastApplied?.version ?? null,
+          lastAppliedAt: lastApplied?.appliedAt ?? null,
           updateCommand: 'npm run update',
+          launcherEntryPoint: 'scripts/launcher.mjs',
           repository: `https://github.com/${REPO_SLUG}`,
         };
         return { content: [{ type: 'text' as const, text: JSON.stringify(info, null, 2) }] };

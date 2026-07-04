@@ -4,6 +4,7 @@ import path from 'path';
 import { APP_VERSION, DEFAULT_RELEASES_URL, REPO_SLUG } from '../version.js';
 import { getUpdateConfig } from '../config.js';
 import { createChildLogger } from './logger.js';
+import { findReleaseZipAsset } from './release-assets.js';
 
 const log = createChildLogger('version-check');
 
@@ -13,28 +14,32 @@ export interface VersionCheckResult {
   updateAvailable: boolean;
   releaseUrl: string | null;
   releaseNotes: string | null;
+  zipAssetUrl: string | null;
   shouldNotify: boolean;
-}
-
-interface GitHubReleaseResponse {
-  tag_name?: string;
-  html_url?: string;
-  body?: string;
 }
 
 interface NotificationCache {
   version: string;
 }
 
-function getCacheDir(): string {
+export interface LastAppliedCache {
+  version: string;
+  appliedAt: string;
+}
+
+export function getUpdateCacheDir(): string {
   return path.join(
     process.env.LOCALAPPDATA ?? path.join(os.homedir(), '.local', 'share'),
     'mcp-tfs2018',
   );
 }
 
-function getCacheFile(): string {
-  return path.join(getCacheDir(), 'last-notified.json');
+function getNotificationCacheFile(): string {
+  return path.join(getUpdateCacheDir(), 'last-notified.json');
+}
+
+function getLastAppliedCacheFile(): string {
+  return path.join(getUpdateCacheDir(), 'last-applied.json');
 }
 
 const CHECK_TIMEOUT_MS = 3_000;
@@ -72,7 +77,7 @@ export function isNewerVersion(latest: string, current: string): boolean {
 
 function readNotificationCache(): NotificationCache | null {
   try {
-    const raw = fs.readFileSync(getCacheFile(), 'utf8');
+    const raw = fs.readFileSync(getNotificationCacheFile(), 'utf8');
     return JSON.parse(raw) as NotificationCache;
   } catch {
     return null;
@@ -80,9 +85,23 @@ function readNotificationCache(): NotificationCache | null {
 }
 
 export function writeNotificationCache(version: string): void {
-  const cacheDir = getCacheDir();
+  const cacheDir = getUpdateCacheDir();
   fs.mkdirSync(cacheDir, { recursive: true });
-  fs.writeFileSync(getCacheFile(), JSON.stringify({ version }, null, 2), 'utf8');
+  fs.writeFileSync(getNotificationCacheFile(), JSON.stringify({ version }, null, 2), 'utf8');
+}
+
+export function readLastAppliedVersion(): LastAppliedCache | null {
+  try {
+    const raw = fs.readFileSync(getLastAppliedCacheFile(), 'utf8');
+    const data = JSON.parse(raw) as LastAppliedCache;
+    if (!data.version) return null;
+    return {
+      version: normalizeVersion(data.version),
+      appliedAt: data.appliedAt ?? '',
+    };
+  } catch {
+    return null;
+  }
 }
 
 export function shouldNotifyForVersion(latest: string): boolean {
@@ -98,7 +117,7 @@ export function parseGitHubRelease(data: unknown): {
   if (!data || typeof data !== 'object') {
     return { latest: null, releaseUrl: null, releaseNotes: null };
   }
-  const release = data as GitHubReleaseResponse;
+  const release = data as { tag_name?: string; html_url?: string; body?: string };
   const latest = release.tag_name ? normalizeVersion(release.tag_name) : null;
   return {
     latest,
@@ -111,6 +130,8 @@ async function fetchLatestRelease(apiUrl: string): Promise<{
   latest: string | null;
   releaseUrl: string | null;
   releaseNotes: string | null;
+  zipAssetUrl: string | null;
+  raw: unknown;
 }> {
   const response = await fetch(apiUrl, {
     headers: {
@@ -124,7 +145,15 @@ async function fetchLatestRelease(apiUrl: string): Promise<{
     throw new Error(`GitHub releases API returned ${response.status}`);
   }
 
-  return parseGitHubRelease(await response.json());
+  const raw = await response.json();
+  const parsed = parseGitHubRelease(raw);
+  const zipAsset = parsed.latest ? findReleaseZipAsset(raw, parsed.latest) : null;
+
+  return {
+    ...parsed,
+    zipAssetUrl: zipAsset?.downloadUrl ?? null,
+    raw,
+  };
 }
 
 export async function checkForUpdates(options?: {
@@ -137,6 +166,7 @@ export async function checkForUpdates(options?: {
     updateAvailable: false,
     releaseUrl: null,
     releaseNotes: null,
+    zipAssetUrl: null,
     shouldNotify: false,
   };
 
@@ -148,7 +178,7 @@ export async function checkForUpdates(options?: {
   const apiUrl = updateConfig.url ?? DEFAULT_RELEASES_URL;
 
   try {
-    const { latest, releaseUrl, releaseNotes } = await fetchLatestRelease(apiUrl);
+    const { latest, releaseUrl, releaseNotes, zipAssetUrl } = await fetchLatestRelease(apiUrl);
     if (!latest) {
       return baseResult;
     }
@@ -162,6 +192,7 @@ export async function checkForUpdates(options?: {
       updateAvailable,
       releaseUrl: releaseUrl ?? `https://github.com/${REPO_SLUG}/releases/latest`,
       releaseNotes,
+      zipAssetUrl,
       shouldNotify,
     };
   } catch (err) {
@@ -180,8 +211,13 @@ export async function notifyIfUpdateAvailable(): Promise<void> {
   writeNotificationCache(result.latest);
 
   const releaseLink = result.releaseUrl ?? `https://github.com/${REPO_SLUG}/releases/latest`;
+  const updateConfig = getUpdateConfig();
+  const hint = updateConfig.autoUpdate
+    ? 'Auto-update is enabled via scripts/launcher.mjs; restart Cursor after the next launch applies the zip.'
+    : 'Update with: npm run update (or set MCP_TFS_AUTO_UPDATE=true and use scripts/launcher.mjs).';
+
   log.warn(
     `MCP-TFS2018 v${result.latest} available (current: v${result.current}). ` +
-    `See: ${releaseLink}. Update with: npm run update`,
+    `See: ${releaseLink}. ${hint}`,
   );
 }

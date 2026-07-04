@@ -36,6 +36,7 @@ const envSchema = z.object({
 
   // Update check
   MCP_TFS_UPDATE_CHECK: z.coerce.boolean().default(true),
+  MCP_TFS_AUTO_UPDATE: z.coerce.boolean().default(true),
   MCP_TFS_UPDATE_URL: z.string().url().optional(),
 });
 
@@ -115,6 +116,7 @@ export function resetConfig(): void {
 
 export interface UpdateConfig {
   enabled: boolean;
+  autoUpdate: boolean;
   url?: string;
 }
 
@@ -125,6 +127,7 @@ export function getUpdateConfig(): UpdateConfig {
   const env = parseEnv();
   _updateConfig = {
     enabled: env.MCP_TFS_UPDATE_CHECK,
+    autoUpdate: env.MCP_TFS_AUTO_UPDATE,
     url: env.MCP_TFS_UPDATE_URL,
   };
   return _updateConfig;
