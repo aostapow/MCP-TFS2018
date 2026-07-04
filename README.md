@@ -6,17 +6,26 @@ Servidor **Model Context Protocol** para **Microsoft Team Foundation Server 2018
 
 ```
 mcp-tfs2018/
+├── scripts/
+│   ├── launcher.mjs              Entry point MCP (auto-update + arranque) — USAR ESTE
+│   ├── zip-update.mjs            Logica de auto-update desde GitHub Releases
+│   ├── update.mjs / update.ps1   Update manual
+│   └── lib/version.mjs           Helpers de version
 ├── src/                          Codigo fuente TypeScript (auditable y modificable)
-├── dist/                         Codigo compilado a JavaScript (lo que ejecuta node)
+├── dist/                         Codigo compilado (arrancado por el launcher; no invocar directo)
 ├── package.json
 ├── package-lock.json
 ├── tsconfig.json
 ├── .env.example                  Plantilla de configuracion - copiala a .env
-├── claude_desktop_config.example.json   Snippet listo para mergear en Claude Desktop
+├── claude_desktop_config.example.json   Snippet listo para mergear en Claude / Cursor
+├── CHANGELOG.md
+├── AGENTS.md                     Checklist de instalacion para agentes de IA
 └── README.md
 ```
 
-> El bundle no incluye `node_modules` (~141 MB). Se instala con `npm install` (ver mas abajo).
+> El bundle no incluye `node_modules` (~141 MB). Instalacion desde release zip: `npm ci`. Desarrollo local: `npm install` (ver mas abajo).
+
+> **Agentes de IA:** segui el checklist en [`AGENTS.md`](AGENTS.md) antes de editar configs o ejecutar comandos.
 
 ## Requisitos
 
@@ -26,34 +35,48 @@ mcp-tfs2018/
 
 ## Instalacion (Windows, paso a paso)
 
-1. **Extraer el zip** donde quieras instalar. Recomendado: fuera de carpetas sincronizadas con OneDrive/Dropbox/Google Drive (las dependencias rompen con sync). Por ejemplo:
+1. **Descargar y extraer el zip** desde [GitHub Releases](https://github.com/aostapow/MCP-TFS2018/releases/latest) (`MCP-TFS2018-vX.Y.Z.zip`). Recomendado: fuera de carpetas sincronizadas con OneDrive/Dropbox/Google Drive (las dependencias rompen con sync). Por ejemplo:
 
    ```
    C:\Users\<tu-usuario>\AppData\Local\mcp-tfs2018\
    ```
 
-2. **Configurar `.env`:**
+2. **Instalar dependencias** (antes de configurar, para poder probar conexion):
 
    ```powershell
    cd "C:\Users\<tu-usuario>\AppData\Local\mcp-tfs2018"
+   npm ci
+   ```
+
+   Usa `npm ci` (no `npm install`) en instalaciones desde zip: respeta `package-lock.json` y es lo que ejecuta el auto-update. `npm install` solo si clonas el repo para desarrollo.
+
+   (Tarda 30-60 segundos. Se descargan ~520 paquetes.)
+
+3. **Configurar credenciales y TFS** — dos formas equivalentes:
+
+   **Opcion A — Wizard interactivo (recomendado para humanos):**
+
+   ```powershell
+   npm run setup
+   ```
+
+   Prueba la conexion, descubre collections/proyectos, escribe `.env` y muestra snippets listos para Claude Desktop / Cursor apuntando a `scripts/launcher.mjs`.
+
+   **Opcion B — Manual (recomendado para agentes de IA):**
+
+   ```powershell
    copy .env.example .env
    notepad .env
    ```
 
    Completa al menos:
    - `TFS_BASE_URL` — ej. `http://tfs2018:8080/tfs`
-   - `TFS_COLLECTION` — ej. `Default`
+   - `TFS_COLLECTION` — ej. `DefaultCollection`
    - `TFS_PROJECT` — proyecto por defecto
    - `TFS_AUTH_TYPE` — `pat` recomendado
    - `TFS_PAT` — generalo en TFS desde la web
 
-3. **Instalar dependencias:**
-
-   ```powershell
-   npm install
-   ```
-
-   (Tarda 30-60 segundos. Se descargan ~520 paquetes.)
+   **Donde van las variables:** el launcher carga `.env` desde la carpeta de instalacion automaticamente. Tambien podes ponerlas en el bloque `env` de `mcp.json` / Claude config (como en `claude_desktop_config.example.json`). Si usas ambos, las del JSON del cliente MCP tienen prioridad al arrancar.
 
 4. **(Opcional) Recompilar el codigo TypeScript a JavaScript:**
 
@@ -84,13 +107,31 @@ mcp-tfs2018/
 
 6. **Registrar en Claude Desktop / Cursor:**
 
-   Edita `%APPDATA%\Claude\claude_desktop_config.json` o `%USERPROFILE%\.cursor\mcp.json` y agrega (o mergea) el bloque `mcpServers` de `claude_desktop_config.example.json`, **ajustando la ruta absoluta** a `scripts\launcher.mjs` y completando el bloque `env`.
+   Edita `%APPDATA%\Claude\claude_desktop_config.json` o `%USERPROFILE%\.cursor\mcp.json` y agrega (o mergea) un bloque como este — **la ruta debe ser absoluta** y apuntar a `scripts\launcher.mjs`, **nunca** a `dist\index.js`:
 
-   El launcher aplica actualizaciones zip automaticamente (si `MCP_TFS_AUTO_UPDATE=true`) y luego arranca el servidor MCP.
+   ```json
+   {
+     "mcpServers": {
+       "tfs2018": {
+         "command": "node",
+         "args": ["C:\\Users\\<tu-usuario>\\AppData\\Local\\mcp-tfs2018\\scripts\\launcher.mjs"],
+         "env": {
+           "TFS_BASE_URL": "http://tu-servidor-tfs:8080/tfs",
+           "TFS_COLLECTION": "DefaultCollection",
+           "TFS_PROJECT": "MiProyecto",
+           "TFS_AUTH_TYPE": "pat",
+           "TFS_PAT": "tu-personal-access-token"
+         }
+       }
+     }
+   }
+   ```
 
-   **Importante:** cerrá Claude Desktop completamente antes de editar (Quit desde la bandeja). Si la app esta corriendo, sobreescribe el archivo al cerrarlo.
+   Referencia completa: `claude_desktop_config.example.json`. El launcher aplica actualizaciones zip automaticamente (si `MCP_TFS_AUTO_UPDATE=true`, default) y luego arranca el servidor MCP.
 
-   Despues de guardar, reabrir Claude Desktop. En el chat principal, pedile: *"Hace `tfs_ping`"*. Si responde con la info del servidor, esta funcionando.
+   **Importante:** cerrá Claude Desktop / reinicia Cursor completamente antes de editar la config. Si la app esta corriendo, puede sobreescribir el archivo al cerrarlo.
+
+   Despues de guardar, reabrir el cliente. Verificacion: en el chat, pedile *"Hace `tfs_ping`"* o *"Hace `tfs_get_server_info`"*. Si responde con datos del servidor TFS, esta funcionando.
 
 ## Variables de entorno
 
@@ -150,6 +191,7 @@ mcp-tfs2018/
 ## Scripts npm
 
 ```powershell
+npm run setup       # Wizard interactivo: .env + snippets MCP
 npm run build       # Compila TypeScript a dist/ (usando esbuild)
 npm run dev         # Corre directo con ts-node (sin compilar)
 npm start           # launcher: auto-update zip + node dist/index.js
@@ -197,7 +239,9 @@ npm run update
 
 Tambien podes usar `scripts\update.ps1`. Reinicia Claude Desktop / Cursor despues de actualizar.
 
-**Instalacion inicial via zip:** descarga desde [GitHub Releases](https://github.com/aostapow/MCP-TFS2018/releases/latest), extrae, configura `.env`, ejecuta `npm ci`, y registra `scripts/launcher.mjs` en tu cliente MCP.
+**Instalacion inicial via zip (resumen):** [GitHub Releases](https://github.com/aostapow/MCP-TFS2018/releases/latest) → extraer → `npm ci` → `.env` (o `npm run setup`) → registrar `scripts/launcher.mjs` en MCP config. Ver [`AGENTS.md`](AGENTS.md) para checklist completo.
+
+**Maquinas sin internet:** desactiva auto-update (`MCP_TFS_AUTO_UPDATE=false`) y actualiza manualmente copiando un zip nuevo cuando haya acceso a la red.
 
 **Desactivar solo el chequeo de releases:** `MCP_TFS_UPDATE_CHECK=false` en `.env`.
 
@@ -224,6 +268,10 @@ Convencion SemVer:
 **`certificate has expired` / `self-signed`** — Pone `TFS_TLS_REJECT_UNAUTHORIZED=false` (solo en redes corporativas internas).
 
 **El JSON de Claude Desktop se revierte al guardar** — La app esta corriendo. Cerrala con Quit desde la bandeja, verificá con Task Manager que no quede ningun proceso `Claude.exe`, y recien ahi editá el archivo.
+
+**El MCP no se actualiza solo** — Verifica que `args` apunte a `scripts/launcher.mjs` (no `dist/index.js`) y que `MCP_TFS_AUTO_UPDATE` no sea `false`. Tras un update en disco, reinicia Cursor o Claude Desktop para cargar el proceso nuevo.
+
+**Auto-update falla en red corporativa** — Configura `MCP_TFS_UPDATE_URL` con un mirror interno del endpoint de GitHub Releases, o usa `npm run update` / `scripts\update.ps1` manualmente.
 
 ## Licencia
 
